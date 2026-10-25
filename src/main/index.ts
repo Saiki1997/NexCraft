@@ -14,6 +14,10 @@ import { DownloadQueue } from "./core/download-queue";
 import { Logger } from "./core/logger";
 import { ProcessHost } from "./core/process-host";
 import { registerIpc } from "./ipc/router";
+import { JavaService } from "./java/java-service";
+import { MojangClient } from "./minecraft/mojang";
+import { PROPERTY_DEFS } from "./servers/server-properties";
+import { ServerService } from "./servers/server-service";
 import { StateService } from "./services/state-service";
 
 const DEV_URL = process.env.NEXCRAFT_DEV_URL || "";
@@ -75,6 +79,37 @@ async function main() {
   const processes = new ProcessHost();
   logger.onEntry((entry) => send("log:entry", entry));
 
+  const settingsDir = (key: "serversDir" | "javaDir", fallback: string) => state.snapshot().settings[key] || path.join(data.dataDir, fallback);
+  const java = new JavaService({
+    state,
+    downloads,
+    log: logger.scope("java"),
+    javaDir: () => settingsDir("javaDir", "java"),
+    userAgent: USER_AGENT,
+  });
+  const mojang = new MojangClient(path.join(data.dataDir, "cache"), USER_AGENT);
+  const servers = new ServerService({
+    state,
+    processes,
+    downloads,
+    java,
+    mojang,
+    log: logger.scope("servers"),
+    serversDir: () => settingsDir("serversDir", "servers"),
+    emitStatus: (status) => send("server:status", status),
+    emitConsole: (id, lines) => send("server:console", { id, lines }),
+    emitInstall: (progress) => {
+      send("server:install", progress);
+      if (progress.step === "done") send("java:changed", java.list());
+    },
+  });
+  const javaChanged = <T>(value: T) => {
+    send("java:changed", java.list());
+    return value;
+  };
+  // Pick up runtimes installed since the last run, without holding up startup.
+  void java.detect().then(javaChanged, (err) => log.warn(`Java scan failed: ${(err as Error).message}`));
+
   const folderFor = (which: "data" | "logs" | "servers" | "backups") => {
     const s = state.snapshot().settings;
     if (which === "data") return data.dataDir;
@@ -118,7 +153,44 @@ async function main() {
         logger.addSecret(key);
         return view;
       },
-      "servers:list": () => state.servers(),
+      "servers:list": () => servers.list(),
+      "servers:statuses": () => servers.statuses(),
+      "servers:create": ({ input, progressKey }) => servers.create(input, progressKey),
+      "servers:remove": ({ id }) => {
+        servers.remove(id);
+        return true;
+      },
+      "servers:accept-eula": ({ id }) => servers.acceptEula(id),
+      "servers:start": ({ id }) => servers.start(id),
+      "servers:stop": ({ id }) => servers.stop(id),
+      "servers:force-stop": ({ id }) => servers.forceStop(id),
+      "servers:restart": ({ id }) => servers.restart(id),
+      "servers:send-command": ({ id, command }) => servers.sendCommand(id, command),
+      "servers:console": ({ id }) => servers.console(id),
+      "servers:get-properties": ({ id }) => ({ values: servers.readProperties(id), fields: PROPERTY_DEFS }),
+      "servers:update-properties": ({ id, values }) => servers.updateProperties(id, values),
+      "servers:update-resources": ({ id, patch }) => servers.updateResources(id, patch),
+      "servers:open-folder": async ({ id }) => {
+        const server = servers.list().find((s) => s.id === id);
+        if (!server || !fs.existsSync(server.directory)) return false;
+        return (await shell.openPath(server.directory)) === "";
+      },
+      "minecraft:versions": ({ includeSnapshots }) => mojang.versions(includeSnapshots),
+      "java:list": () => java.list(),
+      "java:detect": async () => javaChanged(await java.detect()),
+      "java:install": async ({ major }) => javaChanged(await java.install(major)),
+      "java:add-custom": async () => {
+        const options: Electron.OpenDialogOptions = {
+          title: "Choose java.exe",
+          properties: ["openFile"],
+          filters: process.platform === "win32" ? [{ name: "Java", extensions: ["exe"] }] : [],
+        };
+        const res = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
+        if (res.canceled || !res.filePaths[0]) return null;
+        return javaChanged(await java.addCustom(res.filePaths[0]));
+      },
+      "java:verify": async ({ id }) => javaChanged(await java.verify(id)),
+      "java:forget": ({ id }) => javaChanged(java.forget(id)),
       "jobs:list": () => state.jobs(),
       "jobs:cancel": ({ id }) => downloads.cancel(id),
       "jobs:clear-finished": () => {
@@ -198,10 +270,24 @@ async function main() {
           });
           if (choice.response !== 0) return;
         }
-        for (const id of running) {
-          const result = await processes.stop(id, { timeoutMs: 90_000 });
-          if (result === "timeout") log.warn(`Server ${id} did not stop within 90 seconds; it was left running`);
+        const results = await servers.stopAll(90_000);
+        const stuck = results.filter((r) => r.result === "timeout").map((r) => r.id);
+        if (stuck.length > 0) {
+          const names = stuck.map((id) => servers.list().find((s) => s.id === id)?.name ?? id).join(", ");
+          log.warn(`Did not stop within 90 seconds: ${names}`);
+          const choice = await dialog.showMessageBox({
+            type: "warning",
+            buttons: ["Force stop and quit", "Keep NexCraft open"],
+            defaultId: 1,
+            cancelId: 1,
+            title: "A server is not stopping",
+            message: `${names} did not stop within 90 seconds.`,
+            detail: "Force stopping ends the server without saving, so recent changes to the world can be lost.",
+          });
+          if (choice.response !== 0) return;
+          for (const id of stuck) await servers.forceStop(id);
         }
+        servers.dispose();
         quitting = true;
         app.quit();
       })();

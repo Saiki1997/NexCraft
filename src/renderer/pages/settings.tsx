@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { call } from "../lib/api";
-import { useAppInfo, useSettings } from "../lib/store";
+import { useAppInfo, useJavaRuntimes, useSettings } from "../lib/store";
 import { Badge, Button, Card, PageHeader } from "../components/ui";
 import type { SettingsPatch, SettingsView } from "../../shared/ipc";
 
@@ -61,6 +61,8 @@ export function SettingsPage({ onTheme }: { onTheme: (t: SettingsView["theme"]) 
           <Folder label="Backups" value={settings.backupsDir} fallback="backups" onPick={() => void pick("backups")} onReset={() => void patch({ backupsDir: "" })} />
           {info && <p className="mt-2 text-xs text-muted">Default location: {info.dataDir}</p>}
         </Card>
+
+        <JavaCard isWindows={info?.platform === "win32"} />
 
         <Card title="Downloads and shutdown">
           <Field label="Parallel downloads">
@@ -132,6 +134,84 @@ export function SettingsPage({ onTheme }: { onTheme: (t: SettingsView["theme"]) 
         </Card>
       </div>
     </>
+  );
+}
+
+function JavaCard({ isWindows }: { isWindows: boolean }) {
+  const [runtimes] = useJavaRuntimes();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [major, setMajor] = useState(21);
+
+  const run = async (label: string, fn: () => Promise<unknown>, done?: string) => {
+    setBusy(label);
+    try {
+      await fn();
+      if (done) toast.success(done);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card
+      title="Java"
+      actions={
+        <div className="flex gap-2">
+          <Button variant="ghost" disabled={!!busy} onClick={() => void run("scan", () => call("java:detect", {}))}>
+            {busy === "scan" ? "Scanning…" : "Scan again"}
+          </Button>
+          <Button disabled={!!busy} onClick={() => void run("add", () => call("java:add-custom", {}))}>
+            Add java.exe…
+          </Button>
+        </div>
+      }
+    >
+      <p className="mb-3 text-sm text-muted">
+        Each server uses the Java version its Minecraft release needs. NexCraft finds Java in the usual places, including the one bundled with the Minecraft
+        Launcher, and can install Eclipse Temurin for you.
+      </p>
+      {runtimes && runtimes.length === 0 && <p className="mb-3 text-sm">No Java found yet. NexCraft installs one when you create a server, or you can install one below.</p>}
+      <ul className="divide-y divide-border text-sm">
+        {runtimes?.map((r) => (
+          <li key={r.id} className="flex items-center justify-between gap-3 py-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">Java {r.version}</span>
+                <Badge tone={r.source === "managed" ? "accent" : "neutral"}>{r.source === "managed" ? "Installed by NexCraft" : r.source === "custom" ? "Added by you" : "Found"}</Badge>
+                {r.arch !== "x64" && r.arch !== "unknown" && <Badge tone="warn">{r.arch}</Badge>}
+              </div>
+              <div className="truncate text-xs text-muted" title={r.executable}>
+                {r.vendor || "Unknown vendor"} · {r.executable}
+              </div>
+            </div>
+            <div className="flex shrink-0 gap-1">
+              <Button variant="ghost" disabled={!!busy} onClick={() => void run(r.id, () => call("java:verify", { id: r.id }), `Java ${r.major} works`)}>
+                Check
+              </Button>
+              <Button variant="ghost" disabled={!!busy} onClick={() => void run(r.id, () => call("java:forget", { id: r.id }))}>
+                Forget
+              </Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex items-center gap-2 border-t border-border pt-3 text-sm">
+        <span>Install Temurin</span>
+        <select value={major} onChange={(e) => setMajor(Number(e.target.value))} className="rounded-md border border-border bg-surface-2 px-2 py-1.5 text-sm" disabled={!isWindows}>
+          {[25, 21, 17, 11, 8].map((m) => (
+            <option key={m} value={m}>
+              Java {m}
+            </option>
+          ))}
+        </select>
+        <Button disabled={!!busy || !isWindows} onClick={() => void run("install", () => call("java:install", { major }), `Java ${major} installed`)}>
+          {busy === "install" ? "Installing…" : "Install"}
+        </Button>
+        {!isWindows && <span className="text-xs text-muted">Automatic install is available on Windows.</span>}
+      </div>
+    </Card>
   );
 }
 

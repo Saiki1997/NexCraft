@@ -29,6 +29,32 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  live:
+    name: Real Vanilla server (${{ matrix.os }})
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Newer Minecraft releases may need Java 25; the runners already have 8, 11, 17 and 21.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      - run: npm run test:live
+        env:
+          NEXCRAFT_LIVE: "1"
+
   package-windows:
     name: Windows x64 portable ZIP
     needs: test

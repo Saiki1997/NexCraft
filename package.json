@@ -19,7 +19,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package:win": "npm run build && electron-builder --win zip --x64 --publish never"
+    "package:win": "npm run build && electron-builder --win zip --x64 --publish never",
+    "test:live": "vitest run test/live"
   },
   "dependencies": {
     "yauzl": "^3.4.0",

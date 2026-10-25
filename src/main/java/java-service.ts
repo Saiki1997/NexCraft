@@ -56,11 +56,15 @@ export class JavaService {
     const now = new Date().toISOString();
     const existing = this.deps.state.javaRuntimes();
     const keep = existing.filter((r) => r.source !== "detected" && fs.existsSync(r.executable));
-    const known = new Set(keep.map((r) => key(r.executable)));
+    const known = new Set(keep.flatMap((r) => [key(r.executable), key(realPath(r.executable))]));
     const detected: JavaRuntime[] = [];
     for (const probe of probes) {
       if (!probe || known.has(key(probe.executable))) continue;
+      // The same runtime is often reachable through links (/bin -> /usr/bin, Windows junctions); list it once.
+      const real = key(realPath(probe.executable));
+      if (known.has(real)) continue;
       known.add(key(probe.executable));
+      known.add(real);
       const isManaged = path.resolve(probe.executable).startsWith(managedRoot + path.sep);
       const previous = existing.find((r) => key(r.executable) === key(probe.executable));
       detected.push(toRuntime(probe, isManaged ? "managed" : "detected", now, previous?.id));
@@ -95,6 +99,12 @@ export class JavaService {
     const updated = { ...toRuntime(probe, runtime.source, new Date().toISOString(), runtime.id) };
     this.deps.state.setJavaRuntimes(list.map((r) => (r.id === id ? updated : r)));
     return updated;
+  }
+
+  /** Stop offering a runtime. Its files are left alone; a scan may find a detected one again. */
+  forget(id: string): JavaRuntime[] {
+    this.deps.state.setJavaRuntimes(this.deps.state.javaRuntimes().filter((r) => r.id !== id));
+    return this.list();
   }
 
   /** Best registered runtime for a required major version, or null. */
@@ -179,6 +189,14 @@ function toRuntime(probe: JavaProbe, source: JavaRuntime["source"], now: string,
     source,
     lastVerifiedAt: now,
   };
+}
+
+function realPath(p: string) {
+  try {
+    return fs.realpathSync.native(p);
+  } catch {
+    return p;
+  }
 }
 
 function key(p: string) {

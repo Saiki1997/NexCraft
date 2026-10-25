@@ -8,6 +8,27 @@ export const CHANNEL_NAMES = [
   "settings:update",
   "settings:set-curseforge-key",
   "servers:list",
+  "servers:statuses",
+  "servers:create",
+  "servers:remove",
+  "servers:accept-eula",
+  "servers:start",
+  "servers:stop",
+  "servers:force-stop",
+  "servers:restart",
+  "servers:send-command",
+  "servers:console",
+  "servers:get-properties",
+  "servers:update-properties",
+  "servers:update-resources",
+  "servers:open-folder",
+  "minecraft:versions",
+  "java:list",
+  "java:detect",
+  "java:install",
+  "java:add-custom",
+  "java:verify",
+  "java:forget",
   "jobs:list",
   "jobs:cancel",
   "jobs:clear-finished",
@@ -16,4 +37,4 @@ export const CHANNEL_NAMES = [
   "dialog:pick-folder",
 ] as const;
 
-export const EVENT_NAMES = ["jobs:changed", "log:entry"] as const;
+export const EVENT_NAMES = ["jobs:changed", "log:entry", "server:status", "server:console", "server:install", "java:changed"] as const;

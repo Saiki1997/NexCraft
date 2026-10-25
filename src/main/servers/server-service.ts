@@ -7,7 +7,6 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
-import os from "node:os";
 import path from "node:path";
 import type { ServerInstance } from "../../shared/model";
 import {
@@ -488,13 +487,6 @@ export class ServerService {
 export function buildJvmArgs(server: Pick<ServerInstance, "memoryMb" | "extraJvmArgs" | "serverJar">): string[] {
   const xms = Math.min(server.memoryMb, 1024);
   return [`-Xms${xms}M`, `-Xmx${server.memoryMb}M`, ...server.extraJvmArgs, "-jar", server.serverJar, "nogui"];
-}
-
-/** Warn when the requested heap leaves too little memory for Windows. */
-export function memoryWarning(memoryMb: number, totalMb = os.totalmem() / 1024 / 1024): string | null {
-  if (memoryMb > totalMb - 2048) return `This leaves less than 2 GB for Windows and other programs (this PC has ${Math.round(totalMb / 1024)} GB).`;
-  if (memoryMb > totalMb * 0.75) return "This is more than three quarters of this PC's memory. Other programs may slow down.";
-  return null;
 }
 
 function emptyStatus(id: string): ServerStatus {

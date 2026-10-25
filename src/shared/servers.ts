@@ -64,3 +64,22 @@ export interface InstallProgress {
   step: "version" | "java" | "download" | "files" | "done" | "failed";
   message: string;
 }
+
+/** Warn when the requested heap leaves too little memory for Windows and other programs. */
+export function memoryWarning(memoryMb: number, totalMb: number): string | null {
+  if (memoryMb > totalMb - 2048) return `This leaves less than 2 GB for Windows and other programs (this PC has ${Math.round(totalMb / 1024)} GB).`;
+  if (memoryMb > totalMb * 0.75) return "This is more than three quarters of this PC's memory. Other programs may slow down.";
+  return null;
+}
+
+export const ResourcesPatchSchema = z
+  .object({
+    name: z.string().trim().min(1).max(64),
+    memoryMb: z.number().int().min(1024).max(65536),
+    extraJvmArgs: z.array(z.string().max(200)).max(40),
+    javaRuntimeId: z.string().max(128).nullable(),
+    autoRestart: z.boolean(),
+  })
+  .partial()
+  .strict();
+export type ResourcesPatch = z.infer<typeof ResourcesPatchSchema>;
