@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { silentLog } from "../../../test/helpers/tmp";
+import type { EventName } from "../../shared/ipc";
 import { dispatch, registerIpc, type Handlers } from "./router";
 
 const trusted = (url: string) => url === "file:///app/index.html";
@@ -65,6 +66,15 @@ describe("preload name lists", () => {
     const { channels } = await import("../../shared/ipc");
     const { CHANNEL_NAMES, EVENT_NAMES } = await import("../../shared/ipc-names");
     expect([...CHANNEL_NAMES].sort()).toEqual(Object.keys(channels).sort());
-    expect([...EVENT_NAMES].sort()).toEqual(["jobs:changed", "log:entry"]);
+    // Listing every event here makes the compiler flag a missing or misspelled one.
+    const events: Record<EventName, true> = {
+      "jobs:changed": true,
+      "log:entry": true,
+      "server:status": true,
+      "server:console": true,
+      "server:install": true,
+      "java:changed": true,
+    };
+    expect([...EVENT_NAMES].sort()).toEqual(Object.keys(events).sort());
   });
 });

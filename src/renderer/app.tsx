@@ -6,7 +6,9 @@ import { cn } from "./lib/format";
 import { DashboardPage } from "./pages/dashboard";
 import { DiagnosticsPage } from "./pages/diagnostics";
 import { DownloadsPage } from "./pages/downloads";
-import { BackupsPage, CreateServerPage, ModpacksPage, ModsPage, ServersPage } from "./pages/planned";
+import { CreateServerPage } from "./pages/create-server";
+import { BackupsPage, ModpacksPage, ModsPage } from "./pages/planned";
+import { ServersPage } from "./pages/servers";
 import { SettingsPage } from "./pages/settings";
 import type { SettingsView } from "../shared/ipc";
 
@@ -31,6 +33,11 @@ function applyTheme(theme: SettingsView["theme"]) {
 
 export function App() {
   const [page, setPage] = useState<Page>("dashboard");
+  const [selectedServer, setSelectedServer] = useState<string | null>(null);
+  const openServer = (id: string | null) => {
+    setSelectedServer(id);
+    setPage("servers");
+  };
 
   useEffect(() => {
     if (!hasBridge()) return;
@@ -53,7 +60,10 @@ export function App() {
             <li key={item.id}>
               <button
                 type="button"
-                onClick={() => setPage(item.id)}
+                onClick={() => {
+                  setPage(item.id);
+                  if (item.id === "servers") setSelectedServer(null);
+                }}
                 aria-current={page === item.id ? "page" : undefined}
                 className={cn(
                   "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors",
@@ -68,9 +78,9 @@ export function App() {
         </ul>
       </nav>
       <main className="min-w-0 flex-1 overflow-auto px-8 py-6">
-        {page === "dashboard" && <DashboardPage go={setPage} />}
-        {page === "servers" && <ServersPage />}
-        {page === "create" && <CreateServerPage />}
+        {page === "dashboard" && <DashboardPage go={setPage} openServer={openServer} />}
+        {page === "servers" && <ServersPage selected={selectedServer} onSelect={setSelectedServer} onCreate={() => setPage("create")} />}
+        {page === "create" && <CreateServerPage onCreated={openServer} />}
         {page === "modpacks" && <ModpacksPage />}
         {page === "mods" && <ModsPage />}
         {page === "downloads" && <DownloadsPage />}

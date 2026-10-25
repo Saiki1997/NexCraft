@@ -7,8 +7,9 @@
  * executable, or reads/writes an arbitrary path.
  */
 import { z } from "zod";
-import type { Job, ServerInstance, Settings } from "./model";
+import type { JavaRuntime, Job, ServerInstance, Settings } from "./model";
 import { ThemeSchema } from "./model";
+import { CreateServerInputSchema, ResourcesPatchSchema, type ConsoleLine, type InstallProgress, type ServerStatus } from "./servers";
 
 export const LogLevelSchema = z.enum(["debug", "info", "warn", "error"]);
 export type LogLevel = z.infer<typeof LogLevelSchema>;
@@ -63,12 +64,50 @@ export type SettingsPatch = z.infer<typeof SettingsPatchSchema>;
 const Empty = z.object({}).strict();
 const Id = z.object({ id: z.string().min(1).max(128) }).strict();
 
+export interface MinecraftVersionList {
+  versions: { id: string; type: "release" | "snapshot" | "old_beta" | "old_alpha"; releaseTime: string }[];
+  latest: string;
+  /** True when Mojang could not be reached and a saved copy was used. */
+  fromCache: boolean;
+}
+
+/** An editable server.properties field, described as plain data for the UI. */
+export interface PropertyField {
+  key: string;
+  label: string;
+  group: string;
+  kind: { type: "bool" } | { type: "int"; min: number; max: number } | { type: "enum"; options: string[] } | { type: "text"; max: number } | { type: "folder-name" };
+  defaultValue: string;
+  help: string;
+}
+
 export const channels = {
   "app:info": Empty,
   "settings:get": Empty,
   "settings:update": SettingsPatchSchema,
   "settings:set-curseforge-key": z.object({ key: z.string().trim().max(200).nullable() }).strict(),
   "servers:list": Empty,
+  "servers:statuses": Empty,
+  "servers:create": z.object({ input: CreateServerInputSchema, progressKey: z.string().min(1).max(64) }).strict(),
+  "servers:remove": Id,
+  "servers:accept-eula": z.object({ id: z.string().min(1).max(128), accepted: z.literal(true) }).strict(),
+  "servers:start": Id,
+  "servers:stop": Id,
+  "servers:force-stop": z.object({ id: z.string().min(1).max(128), confirmed: z.literal(true) }).strict(),
+  "servers:restart": Id,
+  "servers:send-command": z.object({ id: z.string().min(1).max(128), command: z.string().max(1000) }).strict(),
+  "servers:console": Id,
+  "servers:get-properties": Id,
+  "servers:update-properties": z.object({ id: z.string().min(1).max(128), values: z.record(z.string().max(80), z.string().max(1000)) }).strict(),
+  "servers:update-resources": z.object({ id: z.string().min(1).max(128), patch: ResourcesPatchSchema }).strict(),
+  "servers:open-folder": Id,
+  "minecraft:versions": z.object({ includeSnapshots: z.boolean() }).strict(),
+  "java:list": Empty,
+  "java:detect": Empty,
+  "java:install": z.object({ major: z.number().int().min(8).max(25) }).strict(),
+  "java:add-custom": Empty,
+  "java:verify": Id,
+  "java:forget": Id,
   "jobs:list": Empty,
   "jobs:cancel": Id,
   "jobs:clear-finished": Empty,
@@ -86,6 +125,27 @@ export interface ChannelOutput {
   "settings:update": SettingsView;
   "settings:set-curseforge-key": SettingsView;
   "servers:list": ServerInstance[];
+  "servers:statuses": ServerStatus[];
+  "servers:create": ServerInstance;
+  "servers:remove": boolean;
+  "servers:accept-eula": ServerInstance;
+  "servers:start": ServerStatus;
+  "servers:stop": "stopped" | "timeout" | "not-running";
+  "servers:force-stop": boolean;
+  "servers:restart": ServerStatus;
+  "servers:send-command": boolean;
+  "servers:console": ConsoleLine[];
+  "servers:get-properties": { values: Record<string, string>; fields: PropertyField[] };
+  "servers:update-properties": { values: Record<string, string>; restartRequired: boolean };
+  "servers:update-resources": { server: ServerInstance; restartRequired: boolean };
+  "servers:open-folder": boolean;
+  "minecraft:versions": MinecraftVersionList;
+  "java:list": JavaRuntime[];
+  "java:detect": JavaRuntime[];
+  "java:install": JavaRuntime;
+  "java:add-custom": JavaRuntime | null;
+  "java:verify": JavaRuntime;
+  "java:forget": JavaRuntime[];
   "jobs:list": Job[];
   "jobs:cancel": boolean;
   "jobs:clear-finished": Job[];
@@ -101,6 +161,10 @@ export type IpcResult<T> = { ok: true; value: T } | { ok: false; error: string; 
 export interface EventPayload {
   "jobs:changed": Job[];
   "log:entry": LogEntry;
+  "server:status": ServerStatus;
+  "server:console": { id: string; lines: ConsoleLine[] };
+  "server:install": InstallProgress;
+  "java:changed": JavaRuntime[];
 }
 export type EventName = keyof EventPayload;
 

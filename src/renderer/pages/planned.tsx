@@ -1,29 +1,5 @@
 import { NotYetBuilt, PageHeader } from "../components/ui";
 
-export function ServersPage() {
-  return (
-    <>
-      <PageHeader title="Servers" description="Start, stop, restart and manage each server, with its live console." />
-      <NotYetBuilt milestone="milestone 3">
-        <p>This screen will list every server with its status, players, CPU, memory, uptime and last backup, plus start, graceful stop, restart and console.</p>
-        <p>The process manager behind it (graceful stop over the server console, force stop only after you confirm) is already part of this build.</p>
-      </NotYetBuilt>
-    </>
-  );
-}
-
-export function CreateServerPage() {
-  return (
-    <>
-      <PageHeader title="Create server" description="A guided wizard for a new server." />
-      <NotYetBuilt milestone="milestone 3">
-        <p>Pick a Minecraft version and server type, name the server and world, and set players, port, game rules, view distance and memory.</p>
-        <p>NexCraft will download the official server files, pick or install the right Java, show progress for every step, and ask you to accept the Minecraft EULA yourself before the first start.</p>
-      </NotYetBuilt>
-    </>
-  );
-}
-
 export function ModpacksPage() {
   return (
     <>

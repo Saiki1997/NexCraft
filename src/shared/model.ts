@@ -62,6 +62,10 @@ export const ServerInstanceSchema = z.object({
   type: ServerTypeSchema,
   loaderVersion: z.string().nullable().default(null),
   javaRuntimeId: z.string().nullable().default(null),
+  /** Java major version this server needs, from Mojang's metadata. */
+  requiredJava: z.number().int().positive().default(21),
+  /** Path of the server JAR relative to `directory`. */
+  serverJar: z.string().default("server.jar"),
   memoryMb: z.number().int().min(512).max(262144).default(4096),
   extraJvmArgs: z.array(z.string()).default([]),
   port: z.number().int().min(1).max(65535).default(25565),

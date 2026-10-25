@@ -81,3 +81,31 @@ export function NotYetBuilt({ milestone, children }: { milestone: string; childr
     </div>
   );
 }
+
+export const inputClass = "rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-sm focus:border-accent focus:outline-none";
+
+export function Dialog({ title, children, actions, onClose }: { title: string; children: ReactNode; actions: ReactNode; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      onKeyDown={(e) => e.key === "Escape" && onClose()}
+    >
+      <div role="dialog" aria-modal="true" aria-label={title} className="w-full max-w-lg rounded-lg border border-border bg-surface shadow-xl">
+        <h2 className="border-b border-border px-5 py-3 text-base font-semibold">{title}</h2>
+        <div className="space-y-3 px-5 py-4 text-sm">{children}</div>
+        <div className="flex justify-end gap-2 border-t border-border px-5 py-3">{actions}</div>
+      </div>
+    </div>
+  );
+}
+
+export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
+  return (
+    <label className="block space-y-1 text-sm">
+      <span className="font-medium">{label}</span>
+      {children}
+      {hint && <span className="block text-xs text-muted">{hint}</span>}
+    </label>
+  );
+}

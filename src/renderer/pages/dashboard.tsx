@@ -1,13 +1,14 @@
 import { Cpu, FolderOpen, HardDrive, KeyRound, Server, TriangleAlert } from "lucide-react";
 import { call } from "../lib/api";
 import { formatTime } from "../lib/format";
-import { useAppInfo, useJobs, useServers } from "../lib/store";
+import { useAppInfo, useJobs, useServers, useServerStatuses } from "../lib/store";
 import { Badge, Button, Card, EmptyState, PageHeader } from "../components/ui";
 import type { Page } from "../app";
 
-export function DashboardPage({ go }: { go: (p: Page) => void }) {
+export function DashboardPage({ go, openServer }: { go: (p: Page) => void; openServer: (id: string) => void }) {
   const info = useAppInfo();
   const servers = useServers();
+  const statuses = useServerStatuses();
   const jobs = useJobs();
   const active = jobs.filter((j) => j.status === "running" || j.status === "queued");
 
@@ -28,18 +29,24 @@ export function DashboardPage({ go }: { go: (p: Page) => void }) {
           {servers && servers.length > 0 ? (
             <ul className="divide-y divide-border">
               {servers.map((s) => (
-                <li key={s.id} className="flex items-center justify-between py-2">
-                  <span className="font-medium">{s.name}</span>
-                  <span className="text-xs text-muted">
+                <li key={s.id} className="flex items-center justify-between gap-3 py-2">
+                  <button type="button" className="font-medium hover:text-accent-strong" onClick={() => openServer(s.id)}>
+                    {s.name}
+                  </button>
+                  <span className="flex items-center gap-2 text-xs text-muted">
                     {s.type} {s.minecraftVersion}
+                    {statuses[s.id]?.state === "running" && <Badge tone="good">{statuses[s.id].players.length} online</Badge>}
+                    {statuses[s.id]?.state === "crashed" && <Badge tone="bad">Crashed</Badge>}
                   </span>
                 </li>
               ))}
             </ul>
           ) : (
             <EmptyState icon={<Server className="size-8" />} title="No servers yet">
-              Creating a server from the app arrives in the next milestone. Once it does, your servers show up here with their status, players, CPU and
-              memory.
+              <p>Create a Vanilla server and it shows up here with its status and players.</p>
+              <Button variant="primary" className="mt-3" onClick={() => go("create")}>
+                Create server
+              </Button>
             </EmptyState>
           )}
         </Card>
