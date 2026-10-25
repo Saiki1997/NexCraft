@@ -1,0 +1,87 @@
+name: Release
+
+# Publishes a GitHub Release with the Windows ZIP whenever main carries a
+# package.json version that has no release yet. Bump the version to release.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Is this version released?
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      exists: ${{ steps.v.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "v$version is already released"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    name: Release v${{ needs.check.outputs.version }}
+    needs: check
+    if: needs.check.outputs.exists == 'false'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Build and package
+        run: npm run package:win
+        env:
+          # Injected at build time only; never stored in the repository.
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Smoke test the packaged app
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem release -Filter "NexCraft-*-win-x64.zip" | Select-Object -First 1
+          if (-not $zip) { throw "No ZIP was produced" }
+          Expand-Archive $zip.FullName -DestinationPath smoke
+          $p = Start-Process smoke/NexCraft.exe -PassThru
+          Start-Sleep -Seconds 15
+          if ($p.HasExited) { throw "NexCraft exited early with code $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          $zip = Get-ChildItem release -Filter "NexCraft-*-win-x64.zip" | Select-Object -First 1
+          $hash = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash.ToLower()
+          "$hash  $($zip.Name)" | Out-File -Encoding ascii "$($zip.FullName).sha256"
+          $notes = @"
+          Portable Windows x64 build. Extract the whole ZIP somewhere you can write to and run ``NexCraft.exe``.
+
+          SHA-256 of the ZIP: ``$hash``
+
+          NexCraft is not signed yet, so Windows SmartScreen may warn the first time you run it.
+          "@
+          gh release create "v$env:VERSION" $zip.FullName "$($zip.FullName).sha256" `
+            --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA `
+            --title "NexCraft $env:VERSION" --notes $notes --generate-notes --prerelease
