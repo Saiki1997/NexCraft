@@ -42,6 +42,13 @@ export const CHANNEL_NAMES = [
   "mods:remove",
   "mods:history",
   "mods:undo",
+  "backups:list",
+  "backups:create",
+  "backups:preview",
+  "backups:restore",
+  "backups:delete",
+  "backups:show",
+  "backups:set-schedule",
   "java:list",
   "java:detect",
   "java:install",
@@ -56,4 +63,4 @@ export const CHANNEL_NAMES = [
   "dialog:pick-folder",
 ] as const;
 
-export const EVENT_NAMES = ["jobs:changed", "log:entry", "server:status", "server:console", "server:install", "java:changed"] as const;
+export const EVENT_NAMES = ["jobs:changed", "log:entry", "server:status", "server:console", "server:install", "java:changed", "backups:changed"] as const;

@@ -79,6 +79,7 @@ export class ServerService {
   private readonly runtimes = new Map<string, Runtime>();
   private readonly cpu = new CpuMeter();
   private metricsTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly lineWaiters = new Set<{ id: string; pattern: RegExp; done: (matched: boolean) => void }>();
 
   constructor(private readonly deps: ServerServiceDeps) {
     deps.processes.on("output", (line) => this.onOutput(line.id, line.stream, line.text));
@@ -226,6 +227,7 @@ export class ServerService {
         createdAt: new Date().toISOString(),
         lastStartedAt: null,
         lastBackupAt: null,
+        backupSchedule: { everyHours: null, keep: 10 },
         modpack: null,
       };
       writeAtomic(path.join(dir, "start.bat"), startScript(server, runtime.executable));
@@ -347,6 +349,32 @@ export class ServerService {
     return this.deps.processes.send(id, clean);
   }
 
+  /**
+   * Send a console command and wait for a line that matches `pattern`, e.g.
+   * "save-all flush" and "Saved the game". Resolves false on timeout or if the
+   * server stops first.
+   */
+  commandAndWait(id: string, command: string, pattern: RegExp, timeoutMs: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const waiter = {
+        id,
+        pattern,
+        done: (matched: boolean) => {
+          clearTimeout(timer);
+          this.lineWaiters.delete(waiter);
+          resolve(matched);
+        },
+      };
+      const timer = setTimeout(() => waiter.done(false), timeoutMs);
+      this.lineWaiters.add(waiter);
+      try {
+        if (!this.sendCommand(id, command)) waiter.done(false);
+      } catch {
+        waiter.done(false);
+      }
+    });
+  }
+
   // ---- settings ------------------------------------------------------------
 
   readProperties(id: string): Record<string, string> {
@@ -425,6 +453,7 @@ export class ServerService {
   private onOutput(id: string, stream: "stdout" | "stderr" | "system", text: string) {
     const rt = this.runtime(id);
     this.push(id, stream, text);
+    for (const w of this.lineWaiters) if (w.id === id && w.pattern.test(text)) w.done(true);
     let changed = false;
     const ready = READY_LINE.exec(text);
     if (ready && rt.status.state === "starting") {
@@ -457,6 +486,7 @@ export class ServerService {
 
   private onExit(id: string, code: number | null, requested: boolean, at: string) {
     const rt = this.runtime(id);
+    for (const w of this.lineWaiters) if (w.id === id) w.done(false);
     const crashed = !requested && code !== 0;
     rt.status = {
       ...rt.status,

@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
+import zlib from "node:zlib";
 import yauzl from "yauzl";
 import { resolveInside } from "./safe-path";
 
@@ -106,6 +107,34 @@ export async function readZipEntries(file: string | Buffer, names: string[], max
     zip.close();
   }
   return found;
+}
+
+/**
+ * Read every entry of an archive back and check it against its stored CRC-32,
+ * so a backup is only trusted once it is known to be readable in full.
+ */
+export async function verifyZip(file: string): Promise<{ entries: number; bytes: number }> {
+  const zip = await open(file);
+  let entries = 0;
+  let bytes = 0;
+  try {
+    await forEachEntry(zip, async (entry) => {
+      entries++;
+      if (entry.fileName.endsWith("/")) return;
+      const stream = await openStream(zip, entry);
+      let crc = 0;
+      let size = 0;
+      for await (const chunk of stream) {
+        crc = zlib.crc32(chunk as Buffer, crc);
+        size += (chunk as Buffer).length;
+      }
+      if (size !== entry.uncompressedSize || crc >>> 0 !== entry.crc32 >>> 0) throw new ArchiveError(`${entry.fileName} is damaged in the archive`);
+      bytes += size;
+    });
+  } finally {
+    zip.close();
+  }
+  return { entries, bytes };
 }
 
 export async function extractZip(
