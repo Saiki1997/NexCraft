@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Typecheck and tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      - run: npm run typecheck
+      - run: npm test
+
+  package-windows:
+    name: Windows x64 portable ZIP
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build and package
+        run: npm run package:win
+        env:
+          # Injected at build time only; never stored in the repository.
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Smoke test the packaged app
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem release -Filter "NexCraft-*-win-x64.zip" | Select-Object -First 1
+          if (-not $zip) { throw "No ZIP was produced" }
+          Expand-Archive $zip.FullName -DestinationPath smoke
+          if (-not (Test-Path smoke/NexCraft.exe)) { throw "NexCraft.exe missing from the ZIP" }
+          if (-not (Test-Path smoke/portable.txt)) { throw "portable.txt missing from the ZIP" }
+          $p = Start-Process smoke/NexCraft.exe -PassThru
+          Start-Sleep -Seconds 15
+          if ($p.HasExited) { throw "NexCraft exited early with code $($p.ExitCode)" }
+          $log = Get-ChildItem smoke/data/logs -Filter "nexcraft-*.log" | Select-Object -First 1
+          if (-not $log) { throw "No log file was written to the portable data folder" }
+          Get-Content $log.FullName
+          if (-not (Select-String -Path $log.FullName -Pattern "starting \(portable data")) { throw "App did not start in portable mode" }
+          Stop-Process -Id $p.Id -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NexCraft-win-x64
+          path: release/NexCraft-*-win-x64.zip
+          if-no-files-found: error

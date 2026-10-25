@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* NexCraft palette: deep ink with a restrained violet accent. */
+:root,
+[data-theme="dark"] {
+  --bg: #0f0d16;
+  --surface: #17141f;
+  --surface-2: #1f1b2a;
+  --border: #2c2739;
+  --text: #ece9f4;
+  --text-muted: #a39db3;
+  --accent: #8b6cf6;
+  --accent-strong: #a48bff;
+  --accent-ink: #ffffff;
+  --good: #3ecf8e;
+  --warn: #f2b84b;
+  --bad: #f2667a;
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: #f6f5fa;
+  --surface: #ffffff;
+  --surface-2: #f0eef6;
+  --border: #dcd8e6;
+  --text: #1b1825;
+  --text-muted: #5f5973;
+  --accent: #6d4fe0;
+  --accent-strong: #5a3dd0;
+  --accent-ink: #ffffff;
+  --good: #1f9d64;
+  --warn: #b7791f;
+  --bad: #d23a52;
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-ink: var(--accent-ink);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --font-sans: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 8px;
+  border: 2px solid var(--bg);
+}
