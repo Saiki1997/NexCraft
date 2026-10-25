@@ -80,6 +80,10 @@ export const ServerInstanceSchema = z.object({
   createdAt: z.string(),
   lastStartedAt: z.string().nullable().default(null),
   lastBackupAt: z.string().nullable().default(null),
+  /** Automatic backups: every `everyHours` hours (null = off), keeping the newest `keep`. */
+  backupSchedule: z
+    .object({ everyHours: z.number().int().min(1).max(168).nullable(), keep: z.number().int().min(1).max(100) })
+    .default({ everyHours: null, keep: 10 }),
   modpack: z
     .object({
       source: z.enum(["curseforge", "modrinth", "local"]),

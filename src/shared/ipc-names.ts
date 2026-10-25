@@ -30,6 +30,25 @@ export const CHANNEL_NAMES = [
   "modpacks:install",
   "modpacks:manual-files",
   "modpacks:add-manual-files",
+  "mods:list",
+  "mods:search",
+  "mods:versions",
+  "mods:plan-add",
+  "mods:check-updates",
+  "mods:plan-update",
+  "mods:apply",
+  "mods:add-files",
+  "mods:set-enabled",
+  "mods:remove",
+  "mods:history",
+  "mods:undo",
+  "backups:list",
+  "backups:create",
+  "backups:preview",
+  "backups:restore",
+  "backups:delete",
+  "backups:show",
+  "backups:set-schedule",
   "java:list",
   "java:detect",
   "java:install",
@@ -44,4 +63,4 @@ export const CHANNEL_NAMES = [
   "dialog:pick-folder",
 ] as const;
 
-export const EVENT_NAMES = ["jobs:changed", "log:entry", "server:status", "server:console", "server:install", "java:changed"] as const;
+export const EVENT_NAMES = ["jobs:changed", "log:entry", "server:status", "server:console", "server:install", "java:changed", "backups:changed"] as const;

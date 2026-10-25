@@ -3,18 +3,25 @@
  * Modrinth and CurseForge the same way.
  */
 import type { PackSearchHit } from "../../shared/modpacks";
-import { CF_LOADER, CLASS_MODPACKS, curseforgeSlugFromInput, type CurseForgeClient } from "./curseforge";
+import { CF_LOADER, CLASS_MODPACKS, CLASS_MODS, curseforgeSlugFromInput, type CurseForgeClient } from "./curseforge";
 import { modrinthSlugFromInput, type ModrinthClient } from "./modrinth";
 
 const LOADER_BY_CF = Object.fromEntries(Object.entries(CF_LOADER).map(([k, v]) => [v, k]));
 
 export async function searchModpacks(
-  modrinth: ModrinthClient,
-  curseforge: CurseForgeClient,
-  opts: { source: "modrinth" | "curseforge"; query: string; gameVersion?: string; loader?: string },
+  modrinth: Pick<ModrinthClient, "search">,
+  curseforge: Pick<CurseForgeClient, "search">,
+  opts: { source: "modrinth" | "curseforge"; query: string; gameVersion?: string; loader?: string; kind?: "modpack" | "mod"; modrinthLoaders?: string[] },
 ): Promise<PackSearchHit[]> {
+  const kind = opts.kind ?? "modpack";
   if (opts.source === "modrinth") {
-    const r = await modrinth.search({ query: opts.query, projectType: "modpack", gameVersion: opts.gameVersion, loader: opts.loader });
+    const r = await modrinth.search({
+      query: opts.query,
+      projectType: kind,
+      gameVersion: opts.gameVersion,
+      loaders: opts.modrinthLoaders ?? (opts.loader ? [opts.loader] : undefined),
+      serverOnly: kind === "mod",
+    });
     return r.hits.map((h) => ({
       source: "modrinth",
       id: h.project_id,
@@ -28,7 +35,7 @@ export async function searchModpacks(
       loaders: h.categories.filter((c) => ["fabric", "quilt", "forge", "neoforge"].includes(c)),
     }));
   }
-  const r = await curseforge.search({ query: opts.query, classId: CLASS_MODPACKS, gameVersion: opts.gameVersion, loader: opts.loader });
+  const r = await curseforge.search({ query: opts.query, classId: kind === "mod" ? CLASS_MODS : CLASS_MODPACKS, gameVersion: opts.gameVersion, loader: opts.loader });
   return r.data.map((m) => ({
     source: "curseforge",
     id: String(m.id),

@@ -79,10 +79,11 @@ export class ModrinthClient {
     return (await res.json()) as T;
   }
 
-  search(opts: { query: string; projectType: "modpack" | "mod"; gameVersion?: string; loader?: string; serverOnly?: boolean; offset?: number; limit?: number }) {
+  /** `loaders` match any of them, e.g. ["quilt", "fabric"] for a Quilt server. */
+  search(opts: { query: string; projectType: "modpack" | "mod"; gameVersion?: string; loaders?: string[]; serverOnly?: boolean; offset?: number; limit?: number }) {
     const facets: string[][] = [[`project_type:${opts.projectType}`]];
     if (opts.gameVersion) facets.push([`versions:${opts.gameVersion}`]);
-    if (opts.loader) facets.push([`categories:${opts.loader}`]);
+    if (opts.loaders?.length) facets.push(opts.loaders.map((l) => `categories:${l}`));
     if (opts.serverOnly) facets.push(["server_side:required", "server_side:optional"]);
     const q = new URLSearchParams({
       query: opts.query,

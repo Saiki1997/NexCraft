@@ -74,6 +74,7 @@ describe("preload name lists", () => {
       "server:console": true,
       "server:install": true,
       "java:changed": true,
+      "backups:changed": true,
     };
     expect([...EVENT_NAMES].sort()).toEqual(Object.keys(events).sort());
   });
