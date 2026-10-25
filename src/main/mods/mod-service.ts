@@ -78,6 +78,7 @@ export class ModService {
   private readonly fileCache = new Map<string, { key: string; sha1: string; meta: ModMetadata | null }>();
   private readonly modrinthByHash = new Map<string, ModrinthVersion | null>();
   private readonly icons = new Map<string, string | null>();
+  private lastEntryMs = 0;
 
   constructor(private readonly deps: ModServiceDeps) {}
 
@@ -610,7 +611,9 @@ export class ModService {
   }
 
   private newEntry(server: ServerInstance): StoredEntry {
-    const at = new Date().toISOString();
+    // Strictly increasing, so two changes in the same millisecond still list in order.
+    this.lastEntryMs = Math.max(Date.now(), this.lastEntryMs + 1);
+    const at = new Date(this.lastEntryMs).toISOString();
     const id = `${at.replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
     fs.mkdirSync(this.entryDir(server, id), { recursive: true });
     return { id, at, summary: "", undone: false, added: [], removed: [], renamed: [] };
