@@ -1,0 +1,10 @@
+node_modules/
+out/
+release/
+dist/
+*.log
+.env
+.env.*
+data/
+.vite/
+coverage/

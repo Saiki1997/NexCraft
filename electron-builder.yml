@@ -1,0 +1,30 @@
+appId: io.github.saiki1997.nexcraft
+productName: NexCraft
+copyright: Copyright (c) 2026 NexCraft contributors
+asar: true
+compression: maximum
+electronLanguages:
+  - en-US
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+  - "!**/*.map"
+npmRebuild: false
+extraFiles:
+  - from: build/portable.txt
+    to: portable.txt
+  - from: LICENSE
+    to: LICENSE.txt
+  - from: build/README.txt
+    to: README.txt
+win:
+  target:
+    - target: zip
+      arch:
+        - x64
+  artifactName: NexCraft-${version}-win-x64.${ext}
+  requestedExecutionLevel: asInvoker
+  signAndEditExecutable: true

@@ -1,0 +1,2 @@
+This file tells NexCraft to keep all of its data in the "data" folder next to NexCraft.exe.
+Delete it to store data in your user profile instead.
