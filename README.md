@@ -6,18 +6,19 @@ NexCraft is a Windows desktop app for creating, running and maintaining Minecraf
 
 ## Status
 
-NexCraft is in early development. This build creates and runs official Vanilla servers. Modded servers and modpacks arrive in milestone 4.
+NexCraft is in early development. This build creates and runs Vanilla, Fabric, Quilt, Forge and NeoForge servers. Modpacks, the mod manager and backups are still being built as part of milestone 4.
 
 | Milestone | Scope | State |
 | --- | --- | --- |
 | 1. Audit | What to reuse from Palnest | Done |
 | 2. Foundation | App shell, validated IPC, storage, logging, download queue, process manager, Windows ZIP | Done |
-| 3. Vanilla server | Create-server wizard, Java detection and install, EULA consent, start and stop, console, `server.properties` | Next |
-| 4. Mods and more | Fabric, Quilt, Forge, NeoForge, CurseForge and Modrinth modpacks, mod manager, backups | Next |
+| 3. Vanilla server | Create-server wizard, Java detection and install, EULA consent, start and stop, console, `server.properties` | Done |
+| 4. Mods and more | Fabric, Quilt, Forge and NeoForge servers | Done |
+| | CurseForge and Modrinth modpacks, mod manager, backups | In progress |
 
 ## Using the portable build
 
-1. Download `NexCraft-<version>-win-x64.zip` from the latest CI run or release.
+1. Download `NexCraft-<version>-win-x64.zip` from the [latest release](https://github.com/Saiki1997/NexCraft/releases).
 2. Extract the whole folder somewhere you can write to (not `Program Files`).
 3. Run `NexCraft.exe`.
 
