@@ -118,6 +118,16 @@ const RULES: Rule[] = [
     }),
   },
   {
+    id: "loader-too-old",
+    severity: "error",
+    test: /Unsupported class file major version (\d+)/,
+    build: (m) => ({
+      title: "The mod loader is too old for this Minecraft version",
+      explanation: `The loader or a mod could not read Minecraft's code (class file version ${m[1]}, made for Java ${Number(m[1]) - 44}). The loader version does not support this Minecraft release yet.`,
+      fix: "Create the server with a newer loader version, or choose an older Minecraft version that the loader supports.",
+    }),
+  },
+  {
     id: "client-only-mod",
     severity: "error",
     test: /(Attempted to load class net\/minecraft\/client|Environment type CLIENT|invalid dist DEDICATED_SERVER|NoClassDefFoundError: net\/minecraft\/client)/,

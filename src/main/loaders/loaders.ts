@@ -90,7 +90,10 @@ export class Loaders {
           if ((err as { status?: number }).status === 400 || (err as { status?: number }).status === 404) return { versions: [], recommended: null };
           throw err;
         }
-        const versions = list.map((e) => ({ version: e.loader.version, stable: type === "fabric" ? e.loader.stable !== false : !/beta|alpha|pre|rc/i.test(e.loader.version) }));
+        // Quilt's list is not ordered newest-first, so sort both rather than trusting the order.
+        const versions = list
+          .map((e) => ({ version: e.loader.version, stable: type === "fabric" ? e.loader.stable !== false : !/beta|alpha|pre|rc/i.test(e.loader.version) }))
+          .sort((a, b) => compareVersions(b.version.replace(/[-+].*$/, ""), a.version.replace(/[-+].*$/, "")) || (a.stable === b.stable ? 0 : a.stable ? -1 : 1));
         return { versions, recommended: versions.find((v) => v.stable)?.version ?? versions[0]?.version ?? null };
       }
       case "forge": {

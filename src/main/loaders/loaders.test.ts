@@ -60,12 +60,19 @@ describe("loader version lists", () => {
         { loader: { version: "0.17.0-beta.1", stable: false } },
         { loader: { version: "0.16.9", stable: true } },
       ]),
-      "https://meta.quiltmc.org/v3/versions/loader/1.21.1": JSON.stringify([{ loader: { version: "0.27.0-beta.1" } }, { loader: { version: "0.26.4" } }]),
+      "https://meta.quiltmc.org/v3/versions/loader/1.21.1": JSON.stringify([
+        { loader: { version: "0.24.0" } },
+        { loader: { version: "0.27.0-beta.1" } },
+        { loader: { version: "0.26.4" } },
+        { loader: { version: "0.9.2" } },
+      ]),
       "https://meta.fabricmc.net/v2/versions/loader/0.1": 400,
     });
     const l = new Loaders({ userAgent: "t", fetch: fn, cacheDir: tmpDir() });
     expect(await l.versions("fabric", "1.21.1")).toMatchObject({ recommended: "0.16.9", versions: [{ stable: false }, { stable: true }] });
-    expect((await l.versions("quilt", "1.21.1")).recommended).toBe("0.26.4");
+    const quilt = await l.versions("quilt", "1.21.1");
+    expect(quilt.recommended).toBe("0.26.4");
+    expect(quilt.versions.map((v) => v.version)).toEqual(["0.27.0-beta.1", "0.26.4", "0.24.0", "0.9.2"]);
     expect(await l.versions("fabric", "0.1")).toEqual({ versions: [], recommended: null });
   });
 

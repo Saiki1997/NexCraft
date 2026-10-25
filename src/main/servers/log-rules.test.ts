@@ -13,6 +13,7 @@ describe("log rules", () => {
     ["[Server thread/WARN]: **** SERVER IS RUNNING IN OFFLINE/INSECURE MODE!", "offline-mode"],
     ["java.lang.RuntimeException: Attempted to load class net/minecraft/client/gui/Screen for invalid dist DEDICATED_SERVER", "client-only-mod"],
     ["net.fabricmc.loader.impl.FormattedException: Incompatible mods found!", "mod-dependencies"],
+    ["Caused by: java.lang.IllegalArgumentException: Unsupported class file major version 69", "loader-too-old"],
     ["[main/ERROR]: Missing or unsupported mandatory dependencies:", "mod-dependencies"],
     ["org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError: Mixin transformation of net.minecraft.X failed", "mixin-failure"],
   ])("recognises %s", (line, id) => {
