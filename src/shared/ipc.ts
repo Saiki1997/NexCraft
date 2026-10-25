@@ -9,6 +9,7 @@
 import { z } from "zod";
 import type { JavaRuntime, Job, ServerInstance, Settings } from "./model";
 import { ThemeSchema } from "./model";
+import type { ImportSummary, ManualFile, PackSearchHit } from "./modpacks";
 import { CreateServerInputSchema, ResourcesPatchSchema, type ConsoleLine, type InstallProgress, type ServerStatus } from "./servers";
 
 export const LogLevelSchema = z.enum(["debug", "info", "warn", "error"]);
@@ -105,6 +106,27 @@ export const channels = {
   "loaders:versions": z
     .object({ type: z.enum(["fabric", "quilt", "forge", "neoforge"]), minecraftVersion: z.string().min(1).max(32).regex(/^[\w.\-]+$/) })
     .strict(),
+  "modpacks:search": z
+    .object({ source: z.enum(["modrinth", "curseforge"]), query: z.string().max(100), gameVersion: z.string().max(32).optional(), loader: z.enum(["fabric", "quilt", "forge", "neoforge"]).optional() })
+    .strict(),
+  "modpacks:versions": z.object({ source: z.enum(["modrinth", "curseforge"]), projectId: z.string().min(1).max(64) }).strict(),
+  "modpacks:inspect": z.union([
+    z.object({ source: z.enum(["modrinth", "curseforge"]), projectId: z.string().min(1).max(64), versionId: z.string().max(64).nullable() }).strict(),
+    z.object({ source: z.literal("file") }).strict(),
+    z.object({ source: z.literal("link"), link: z.string().max(300) }).strict(),
+  ]),
+  "modpacks:install": z
+    .object({
+      planId: z.string().uuid(),
+      progressKey: z.string().min(1).max(64),
+      name: z.string().trim().min(1).max(64),
+      memoryMb: z.number().int().min(1024).max(65536),
+      port: z.number().int().min(1024).max(65535),
+      useServerPack: z.boolean(),
+    })
+    .strict(),
+  "modpacks:manual-files": Id,
+  "modpacks:add-manual-files": Id,
   "java:list": Empty,
   "java:detect": Empty,
   "java:install": z.object({ major: z.number().int().min(8).max(25) }).strict(),
@@ -144,6 +166,12 @@ export interface ChannelOutput {
   "servers:open-folder": boolean;
   "minecraft:versions": MinecraftVersionList;
   "loaders:versions": { versions: { version: string; stable: boolean }[]; recommended: string | null };
+  "modpacks:search": { hits: PackSearchHit[]; available: boolean };
+  "modpacks:versions": { id: string; name: string; gameVersions: string[]; loaders: string[]; date: string; stable: boolean }[];
+  "modpacks:inspect": ImportSummary | null;
+  "modpacks:install": { server: ServerInstance; clientOnlyRemoved: string[]; manual: ManualFile[] };
+  "modpacks:manual-files": ManualFile[];
+  "modpacks:add-manual-files": { added: string[]; rejected: string[] } | null;
   "java:list": JavaRuntime[];
   "java:detect": JavaRuntime[];
   "java:install": JavaRuntime;

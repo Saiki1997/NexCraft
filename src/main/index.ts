@@ -16,6 +16,10 @@ import { ProcessHost } from "./core/process-host";
 import { registerIpc } from "./ipc/router";
 import { JavaService } from "./java/java-service";
 import { Loaders } from "./loaders/loaders";
+import { ModpackService } from "./modpacks/modpack-service";
+import { CurseForgeClient } from "./providers/curseforge";
+import { ModrinthClient } from "./providers/modrinth";
+import { modpackVersions, resolvePackLink, searchModpacks } from "./providers/search";
 import { MojangClient } from "./minecraft/mojang";
 import { PROPERTY_DEFS } from "./servers/server-properties";
 import { ServerService } from "./servers/server-service";
@@ -106,6 +110,27 @@ async function main() {
       if (progress.step === "done") send("java:changed", java.list());
     },
   });
+  const modrinth = new ModrinthClient(USER_AGENT);
+  const curseforge = new CurseForgeClient(() => state.curseforgeKeyOverride() ?? (BUILT_IN_CURSEFORGE_KEY || null), USER_AGENT);
+  const modpacks = new ModpackService({
+    servers,
+    state,
+    downloads,
+    modrinth,
+    curseforge,
+    cacheDir: path.join(data.dataDir, "cache"),
+    log: logger.scope("modpacks"),
+  });
+  const serverById = (id: string) => {
+    const server = state.server(id);
+    if (!server) throw new Error("That server no longer exists");
+    return server;
+  };
+  const pickFiles = async (title: string, filters: Electron.FileFilter[], multi: boolean) => {
+    const options: Electron.OpenDialogOptions = { title, filters, properties: multi ? ["openFile", "multiSelections"] : ["openFile"] };
+    const res = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
+    return res.canceled ? [] : res.filePaths;
+  };
   const javaChanged = <T>(value: T) => {
     send("java:changed", java.list());
     return value;
@@ -180,6 +205,32 @@ async function main() {
       },
       "minecraft:versions": ({ includeSnapshots }) => mojang.versions(includeSnapshots),
       "loaders:versions": ({ type, minecraftVersion }) => loaders.versions(type, minecraftVersion),
+      "modpacks:search": async (q) => {
+        if (q.source === "curseforge" && !curseforge.available()) return { hits: [], available: false };
+        return { hits: await searchModpacks(modrinth, curseforge, q), available: true };
+      },
+      "modpacks:versions": ({ source, projectId }) => modpackVersions(modrinth, curseforge, source, projectId),
+      "modpacks:inspect": async (input) => {
+        if (input.source === "file") {
+          const [file] = await pickFiles("Choose a modpack", [{ name: "Modpacks", extensions: ["mrpack", "zip"] }], false);
+          return file ? modpacks.inspectFile(file) : null;
+        }
+        if (input.source === "link") {
+          const resolved = await resolvePackLink(modrinth, curseforge, input.link);
+          if (!resolved) throw new Error("Paste a Modrinth or CurseForge modpack link");
+          return resolved.source === "modrinth" ? modpacks.inspectModrinth(resolved.projectId, null) : modpacks.inspectCurseForge(Number(resolved.projectId), null);
+        }
+        return input.source === "modrinth"
+          ? modpacks.inspectModrinth(input.projectId, input.versionId)
+          : modpacks.inspectCurseForge(Number(input.projectId), input.versionId ? Number(input.versionId) : null);
+      },
+      "modpacks:install": ({ planId, progressKey, ...opts }) =>
+        modpacks.install(planId, opts, progressKey, (message) => send("server:install", { key: progressKey, step: "modpack", message })),
+      "modpacks:manual-files": ({ id }) => modpacks.manualFiles(serverById(id)),
+      "modpacks:add-manual-files": async ({ id }) => {
+        const files = await pickFiles("Choose the files you downloaded", [{ name: "Mods", extensions: ["jar", "zip"] }], true);
+        return files.length ? modpacks.addManualFiles(serverById(id), files) : null;
+      },
       "java:list": () => java.list(),
       "java:detect": async () => javaChanged(await java.detect()),
       "java:install": async ({ major }) => javaChanged(await java.install(major)),

@@ -83,10 +83,42 @@ export async function readZipEntry(file: string, name: string, maxBytes = 16 * 1
  * Extract `file` into `dest`. `stripPrefix` removes a leading folder (for archives
  * that wrap everything in one top-level directory). `filter` can skip entries.
  */
+/** Read several small entries in one pass. Missing entries are left out of the result. */
+export async function readZipEntries(file: string, names: string[], maxBytes = 4 * 1024 * 1024): Promise<Map<string, Buffer>> {
+  const wanted = new Set(names);
+  const found = new Map<string, Buffer>();
+  const zip = await open(file);
+  try {
+    await forEachEntry(zip, async (entry) => {
+      if (!wanted.has(entry.fileName) || found.has(entry.fileName)) return;
+      if (entry.uncompressedSize > maxBytes) return;
+      const stream = await openStream(zip, entry);
+      const chunks: Buffer[] = [];
+      let total = 0;
+      for await (const chunk of stream) {
+        total += (chunk as Buffer).length;
+        if (total > maxBytes) throw new ArchiveError(`${entry.fileName} is larger than it claims`);
+        chunks.push(chunk as Buffer);
+      }
+      found.set(entry.fileName, Buffer.concat(chunks));
+    });
+  } finally {
+    zip.close();
+  }
+  return found;
+}
+
 export async function extractZip(
   file: string,
   dest: string,
-  opts: { limits?: Partial<ExtractLimits>; stripPrefix?: string; filter?: (name: string) => boolean; signal?: AbortSignal } = {},
+  opts: {
+    limits?: Partial<ExtractLimits>;
+    stripPrefix?: string;
+    filter?: (name: string) => boolean;
+    signal?: AbortSignal;
+    /** Replace existing regular files (e.g. pack overrides over defaults). Links and folders are never replaced. */
+    overwrite?: boolean;
+  } = {},
 ): Promise<ExtractResult> {
   const limits = { ...DEFAULT_LIMITS, ...opts.limits };
   fs.mkdirSync(dest, { recursive: true });
@@ -125,6 +157,11 @@ export async function extractZip(
       if (bytes + entry.uncompressedSize > limits.maxTotalBytes) throw new ArchiveError("Archive is larger than allowed");
 
       fs.mkdirSync(path.dirname(target), { recursive: true });
+      if (opts.overwrite) {
+        const existing = fs.lstatSync(target, { throwIfNoEntry: false });
+        if (existing && !existing.isFile()) throw new ArchiveError(`${entry.fileName} would replace a folder or link`);
+        if (existing) fs.unlinkSync(target);
+      }
       const stream = await openStream(zip, entry);
       let written = 0;
       const guard = new Transform({

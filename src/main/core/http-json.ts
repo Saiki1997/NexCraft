@@ -85,3 +85,12 @@ export async function fetchText(url: string, opts: JsonFetchOptions): Promise<st
     clearTimeout(timer);
   }
 }
+
+/** Turn Node's bare "fetch failed" and timeouts into a message that names the service. */
+export function explainNetworkError(service: string, err: unknown): Error {
+  if (err instanceof HttpError) return err;
+  const e = err as Error;
+  if (e?.name === "AbortError" || e?.name === "TimeoutError") return new Error(`${service} did not answer in time. Try again in a moment.`);
+  if (e instanceof TypeError && /fetch failed/i.test(e.message)) return new Error(`Could not reach ${service}. Check your internet connection.`);
+  return e instanceof Error ? e : new Error(String(err));
+}
