@@ -112,7 +112,8 @@ describe.skipIf(!process.env.NEXCRAFT_LIVE)(`live ${TYPE} server`, () => {
     const names = (await listZip(backups.archivePath(server.id, backup.id))).map((e) => e.name);
     expect(names).toContain("world/level.dat");
     expect(names.some((n) => n.startsWith("libraries/") || n.endsWith("session.lock"))).toBe(false);
-    expect(consoleLines.some((l) => /Automatic saving is now enabled/.test(l.text))).toBe(true);
+    // The console reaches listeners in batches, so the reply to save-on may arrive a moment later.
+    await until(() => consoleLines.some((l) => /Automatic saving is now enabled/.test(l.text)), 10_000, "saving to be turned back on");
 
     const result = await servers.stop(server.id, 120_000);
     expect(result).toBe("stopped");
