@@ -22,6 +22,7 @@
     "package:win": "npm run build && electron-builder --win zip --x64 --publish never"
   },
   "dependencies": {
+    "yauzl": "^3.4.0",
     "zod": "^4.1.0"
   },
   "devDependencies": {
@@ -29,6 +30,7 @@
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "@types/yauzl": "^3.4.0",
     "@vitejs/plugin-react": "^5.0.0",
     "electron": "^44.9.3",
     "electron-builder": "^26.0.12",

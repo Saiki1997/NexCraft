@@ -4,7 +4,7 @@
  */
 import path from "node:path";
 import type { SettingsPatch, SettingsView } from "../../shared/ipc";
-import { AppStateSchema, defaultAppState, MAX_FINISHED_JOBS, SCHEMA_VERSION, type AppState, type Job, type ServerInstance } from "../../shared/model";
+import { AppStateSchema, defaultAppState, MAX_FINISHED_JOBS, SCHEMA_VERSION, type AppState, type JavaRuntime, type Job, type ServerInstance } from "../../shared/model";
 import { JsonStore, type LoadResult } from "../core/json-store";
 import type { ScopedLogger } from "../core/logger";
 
@@ -101,6 +101,32 @@ export class StateService {
 
   servers(): ServerInstance[] {
     return structuredClone(this.state.servers);
+  }
+
+  server(id: string): ServerInstance | null {
+    const found = this.state.servers.find((s) => s.id === id);
+    return found ? structuredClone(found) : null;
+  }
+
+  upsertServer(server: ServerInstance) {
+    const i = this.state.servers.findIndex((s) => s.id === server.id);
+    if (i >= 0) this.state.servers[i] = structuredClone(server);
+    else this.state.servers.push(structuredClone(server));
+    this.scheduleSave();
+  }
+
+  removeServer(id: string) {
+    this.state.servers = this.state.servers.filter((s) => s.id !== id);
+    this.scheduleSave();
+  }
+
+  javaRuntimes(): JavaRuntime[] {
+    return structuredClone(this.state.javaRuntimes);
+  }
+
+  setJavaRuntimes(list: JavaRuntime[]) {
+    this.state.javaRuntimes = structuredClone(list);
+    this.scheduleSave();
   }
 
   jobs(): Job[] {
