@@ -117,6 +117,36 @@ const RULES: Rule[] = [
       fix: "Turn on online mode unless you have a specific reason not to.",
     }),
   },
+  {
+    id: "client-only-mod",
+    severity: "error",
+    test: /(Attempted to load class net\/minecraft\/client|Environment type CLIENT|invalid dist DEDICATED_SERVER|NoClassDefFoundError: net\/minecraft\/client)/,
+    build: () => ({
+      title: "A client-only mod is installed",
+      explanation: "A mod that only works in the game client (for example a minimap, shader or HUD mod) was loaded on the server.",
+      fix: "Remove the client-only mod from the server's mods folder. The lines above this one in the console usually name it.",
+    }),
+  },
+  {
+    id: "mod-dependencies",
+    severity: "error",
+    test: /(Incompatible mods? (set|found)|Missing or unsupported mandatory dependencies|requires (any version|version) .* of ['"]?[\w-]+['"]?, which is missing)/i,
+    build: () => ({
+      title: "Mods are missing a dependency or conflict",
+      explanation: "The mod loader refused to start because a mod needs another mod (or a different version of one) that is not installed.",
+      fix: "Read the lines after this one: they list each mod and what it needs. Add or update those mods, or remove the mod that needs them.",
+    }),
+  },
+  {
+    id: "mixin-failure",
+    severity: "error",
+    test: /(Mixin apply failed|MixinApplyError|Mixin transformation of .* failed)/,
+    build: () => ({
+      title: "Two mods clash, or a mod is for another Minecraft version",
+      explanation: "A mod failed to modify the game's code. This usually means it does not match this Minecraft or loader version, or conflicts with another mod.",
+      fix: "Check that every mod is built for this Minecraft version and loader. The mod named near this line is the likely cause.",
+    }),
+  },
 ];
 
 export function matchLine(line: string): Finding | null {

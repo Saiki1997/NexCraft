@@ -19,6 +19,12 @@ const STATE_LABEL: Record<ServerState, { label: string; tone: "neutral" | "good"
   crashed: { label: "Crashed", tone: "bad" },
 };
 
+const TYPE_LABEL: Record<ServerInstance["type"], string> = { vanilla: "Vanilla", fabric: "Fabric", quilt: "Quilt", forge: "Forge", neoforge: "NeoForge" };
+
+export function serverKind(s: ServerInstance) {
+  return s.type === "vanilla" ? `Vanilla ${s.minecraftVersion}` : `${TYPE_LABEL[s.type]} ${s.loaderVersion ?? ""} · Minecraft ${s.minecraftVersion}`;
+}
+
 const toastError = (e: unknown) => toast.error((e as Error).message);
 
 export function ServersPage({ selected, onSelect, onCreate }: { selected: string | null; onSelect: (id: string | null) => void; onCreate: () => void }) {
@@ -42,7 +48,7 @@ export function ServersPage({ selected, onSelect, onCreate }: { selected: string
       />
       {servers && servers.length === 0 && (
         <EmptyState icon={<Server className="size-8" />} title="No servers yet">
-          Create a Vanilla server to get started.
+          Create a Vanilla or modded server to get started.
         </EmptyState>
       )}
       <div className="grid gap-3 xl:grid-cols-2">
@@ -62,7 +68,7 @@ function ServerCard({ server, status, onOpen }: { server: ServerInstance; status
         <button type="button" onClick={onOpen} className="min-w-0 text-left">
           <h2 className="truncate font-semibold hover:text-accent-strong">{server.name}</h2>
           <p className="text-xs text-muted">
-            Vanilla {server.minecraftVersion} · port {server.port} · {(server.memoryMb / 1024).toFixed(1)} GB
+            {serverKind(server)} · port {server.port} · {(server.memoryMb / 1024).toFixed(1)} GB
           </p>
         </button>
         <Badge tone={STATE_LABEL[state].tone}>{STATE_LABEL[state].label}</Badge>
@@ -246,7 +252,7 @@ function ServerDetail({ server, status, onBack }: { server: ServerInstance; stat
       </button>
       <PageHeader
         title={server.name}
-        description={`Vanilla ${server.minecraftVersion} · Java ${server.requiredJava} · ${server.directory}`}
+        description={`${serverKind(server)} · Java ${server.requiredJava} · ${server.directory}`}
         actions={
           <>
             <Badge tone={STATE_LABEL[state].tone}>{STATE_LABEL[state].label}</Badge>

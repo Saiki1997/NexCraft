@@ -5,7 +5,9 @@ export const CreateServerInputSchema = z
   .object({
     name: z.string().trim().min(1, "Give the server a name").max(64),
     minecraftVersion: z.string().min(1).max(32).regex(/^[\w.\-]+$/),
-    type: z.literal("vanilla"),
+    type: z.enum(["vanilla", "fabric", "quilt", "forge", "neoforge"]),
+    /** Loader version for modded servers; null picks the recommended one. */
+    loaderVersion: z.string().max(64).regex(/^[\w.\-+]+$/).nullable().default(null),
     /** Absolute parent folder; empty uses the configured servers folder. */
     parentDir: z.string().max(1024).default(""),
     worldName: z.string().trim().min(1).max(64).regex(/^[^<>:"/\\|?*\x00-\x1f]+$/, "Not a valid folder name").default("world"),
@@ -61,7 +63,7 @@ export interface ConsoleLine {
 
 export interface InstallProgress {
   key: string;
-  step: "version" | "java" | "download" | "files" | "done" | "failed";
+  step: "version" | "java" | "download" | "loader" | "files" | "done" | "failed";
   message: string;
 }
 

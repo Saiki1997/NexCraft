@@ -11,6 +11,10 @@ describe("log rules", () => {
     ["Error: Invalid or corrupt jarfile server.jar", "corrupt-jar"],
     ["[Server thread/WARN]: Can't keep up! Is the server overloaded? Running 5003ms or 100 ticks behind", "cant-keep-up"],
     ["[Server thread/WARN]: **** SERVER IS RUNNING IN OFFLINE/INSECURE MODE!", "offline-mode"],
+    ["java.lang.RuntimeException: Attempted to load class net/minecraft/client/gui/Screen for invalid dist DEDICATED_SERVER", "client-only-mod"],
+    ["net.fabricmc.loader.impl.FormattedException: Incompatible mods found!", "mod-dependencies"],
+    ["[main/ERROR]: Missing or unsupported mandatory dependencies:", "mod-dependencies"],
+    ["org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError: Mixin transformation of net.minecraft.X failed", "mixin-failure"],
   ])("recognises %s", (line, id) => {
     const f = matchLine(line);
     expect(f?.id).toBe(id);

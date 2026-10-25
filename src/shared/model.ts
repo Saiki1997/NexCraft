@@ -66,6 +66,11 @@ export const ServerInstanceSchema = z.object({
   requiredJava: z.number().int().positive().default(21),
   /** Path of the server JAR relative to `directory`. */
   serverJar: z.string().default("server.jar"),
+  /**
+   * How to start the server after the JVM memory options. Empty means
+   * `-jar <serverJar> nogui`. Mod loaders set their own, e.g. Forge's argument file.
+   */
+  launchArgs: z.array(z.string()).default([]),
   memoryMb: z.number().int().min(512).max(262144).default(4096),
   extraJvmArgs: z.array(z.string()).default([]),
   port: z.number().int().min(1).max(65535).default(25565),

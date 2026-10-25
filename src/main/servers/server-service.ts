@@ -4,6 +4,7 @@
  * track status, players, CPU and memory. Server files are only written inside
  * the server's own folder.
  */
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
@@ -23,6 +24,7 @@ import { CpuMeter, sampleProcess } from "../core/process-metrics";
 import type { ProcessHost } from "../core/process-host";
 import { isInside, toSafeName } from "../core/safe-path";
 import type { JavaService } from "../java/java-service";
+import { LOADER_NAMES, type Loaders, type RunJava } from "../loaders/loaders";
 import { javaFit } from "../minecraft/java-requirement";
 import type { MojangClient } from "../minecraft/mojang";
 import type { StateService } from "../services/state-service";
@@ -48,6 +50,7 @@ export interface ServerServiceDeps {
   downloads: DownloadQueue;
   java: Pick<JavaService, "pickFor" | "install" | "list" | "detect">;
   mojang: Pick<MojangClient, "serverDownload">;
+  loaders: Pick<Loaders, "versions" | "install">;
   log: ScopedLogger;
   serversDir: () => string;
   emitStatus: (status: ServerStatus) => void;
@@ -59,6 +62,8 @@ export interface ServerServiceDeps {
   platform?: NodeJS.Platform;
   /** Turns a Java executable and JVM arguments into the command to run. Tests swap in a fake server. */
   command?: (javaExe: string, args: string[]) => { executable: string; args: string[] };
+  /** Runs loader installers. Tests swap in a fake. */
+  runJava?: (javaExe: string) => RunJava;
 }
 
 interface Runtime {
@@ -109,7 +114,7 @@ export class ServerService {
     const report = (step: InstallProgress["step"], message: string) => this.deps.emitInstall({ key: progressKey, step, message });
     const parent = input.parentDir || this.deps.serversDir();
     if (!path.isAbsolute(parent)) throw new ServerError("The servers folder must be an absolute path", "invalid");
-    const dir = uniqueDir(parent, toSafeName(input.name, "server"));
+    let dir = "";
     let createdDir = false;
     try {
       report("version", `Looking up Minecraft ${input.minecraftVersion}`);
@@ -130,19 +135,59 @@ export class ServerService {
         runtime = await this.deps.java.install(download.javaMajor);
       }
 
+      let loaderVersion: string | null = null;
+      if (input.type !== "vanilla") {
+        const name = LOADER_NAMES[input.type];
+        report("loader", `Looking up ${name} for Minecraft ${input.minecraftVersion}`);
+        const list = await this.deps.loaders.versions(input.type, input.minecraftVersion);
+        loaderVersion = input.loaderVersion ?? list.recommended;
+        if (!loaderVersion || !list.versions.some((v) => v.version === loaderVersion)) {
+          throw new ServerError(
+            list.versions.length
+              ? `${name} ${input.loaderVersion} is not available for Minecraft ${input.minecraftVersion}`
+              : `${name} does not support Minecraft ${input.minecraftVersion} yet`,
+            "invalid",
+          );
+        }
+      }
+
+      // Chosen just before use so two servers created at once never share a folder.
+      dir = uniqueDir(parent, toSafeName(input.name, "server"));
       fs.mkdirSync(dir, { recursive: true });
       createdDir = true;
-      report("download", `Downloading the official server for ${input.minecraftVersion}`);
-      const jar = path.join(dir, "server.jar");
-      const { done } = this.deps.downloads.enqueue({
-        url: download.url,
-        dest: jar,
-        title: `Minecraft ${input.minecraftVersion} server`,
-        hash: { algo: "sha1", value: download.sha1 },
-        size: download.size,
-      });
-      const result = await done;
-      if (!result.ok) throw new Error(result.cancelled ? "Download cancelled" : `Server download failed: ${result.error}`);
+      // Forge and NeoForge installers fetch and verify the Vanilla server themselves.
+      if (input.type !== "forge" && input.type !== "neoforge") {
+        report("download", `Downloading the official server for ${input.minecraftVersion}`);
+        const { done } = this.deps.downloads.enqueue({
+          url: download.url,
+          dest: path.join(dir, "server.jar"),
+          title: `Minecraft ${input.minecraftVersion} server`,
+          hash: { algo: "sha1", value: download.sha1 },
+          size: download.size,
+        });
+        const result = await done;
+        if (!result.ok) throw new Error(result.cancelled ? "Download cancelled" : `Server download failed: ${result.error}`);
+      }
+
+      let launchArgs: string[] = [];
+      if (input.type !== "vanilla" && loaderVersion) {
+        const installLog = path.join(dir, "logs", "nexcraft-install.log");
+        fs.mkdirSync(path.dirname(installLog), { recursive: true });
+        const runJava = (this.deps.runJava ?? defaultRunJava)(runtime.executable);
+        const installed = await this.deps.loaders.install(input.type, {
+          dir,
+          minecraftVersion: input.minecraftVersion,
+          loaderVersion,
+          downloads: this.deps.downloads,
+          platform: this.deps.platform ?? process.platform,
+          report: (message) => {
+            fs.appendFileSync(installLog, `${message}\n`);
+            report("loader", message.slice(0, 300));
+          },
+          runJava,
+        });
+        launchArgs = installed.launchArgs;
+      }
 
       report("files", "Writing server settings");
       const props = ServerProperties.fresh({
@@ -166,11 +211,12 @@ export class ServerService {
         name: input.name,
         directory: dir,
         minecraftVersion: input.minecraftVersion,
-        type: "vanilla",
-        loaderVersion: null,
+        type: input.type,
+        loaderVersion,
         javaRuntimeId: runtime.id,
         requiredJava: download.javaMajor,
         serverJar: "server.jar",
+        launchArgs,
         memoryMb: input.memoryMb,
         extraJvmArgs: [],
         port: input.port,
@@ -185,11 +231,12 @@ export class ServerService {
       writeAtomic(path.join(dir, "start.bat"), startScript(server, runtime.executable));
       this.deps.state.upsertServer(server);
       report("done", `${input.name} is ready`);
-      this.deps.log.info(`Created Vanilla ${input.minecraftVersion} server "${input.name}" at ${dir}`);
+      const label = input.type === "vanilla" ? "Vanilla" : `${LOADER_NAMES[input.type]} ${loaderVersion}`;
+      this.deps.log.info(`Created ${label} ${input.minecraftVersion} server "${input.name}" at ${dir}`);
       return server;
     } catch (err) {
       report("failed", (err as Error).message);
-      if (createdDir) removeOwnFiles(dir);
+      if (createdDir) removeCreatedDir(dir);
       throw err;
     }
   }
@@ -223,8 +270,11 @@ export class ServerService {
     if (!server.eulaAccepted || !eulaAcceptedOnDisk(server.directory)) {
       throw new ServerError("Accept the Minecraft EULA before starting this server", "eula-required");
     }
-    const jar = path.join(server.directory, server.serverJar);
-    if (!isInside(server.directory, jar) || !fs.existsSync(jar)) throw new ServerError("The server JAR is missing. Repair the server first.", "files-missing");
+    const launchFile = launchTarget(server);
+    const launchPath = path.join(server.directory, launchFile);
+    if (!isInside(server.directory, launchPath) || !fs.existsSync(launchPath)) {
+      throw new ServerError(`${launchFile} is missing from the server folder, so the server cannot start.`, "files-missing");
+    }
 
     const runtime = this.deps.java.list().find((r) => r.id === server.javaRuntimeId) ?? this.deps.java.pickFor(server.requiredJava);
     if (!runtime || !fs.existsSync(runtime.executable)) {
@@ -484,9 +534,49 @@ export class ServerService {
   }
 }
 
-export function buildJvmArgs(server: Pick<ServerInstance, "memoryMb" | "extraJvmArgs" | "serverJar">): string[] {
+export function buildJvmArgs(server: Pick<ServerInstance, "memoryMb" | "extraJvmArgs" | "serverJar" | "launchArgs">): string[] {
   const xms = Math.min(server.memoryMb, 1024);
-  return [`-Xms${xms}M`, `-Xmx${server.memoryMb}M`, ...server.extraJvmArgs, "-jar", server.serverJar, "nogui"];
+  const launch = server.launchArgs?.length ? server.launchArgs : ["-jar", server.serverJar, "nogui"];
+  return [`-Xms${xms}M`, `-Xmx${server.memoryMb}M`, ...server.extraJvmArgs, ...launch];
+}
+
+/** The file the launch arguments depend on: the jar after -jar, or an @argument file. */
+export function launchTarget(server: Pick<ServerInstance, "serverJar" | "launchArgs">): string {
+  const args = server.launchArgs ?? [];
+  const at = args.find((a) => a.startsWith("@"));
+  if (at) return at.slice(1);
+  const jar = args.indexOf("-jar");
+  if (jar >= 0 && args[jar + 1]) return args[jar + 1];
+  return server.serverJar;
+}
+
+/** Run a Java program (a loader installer) with no shell, ending it if it runs too long. */
+export function defaultRunJava(javaExe: string): RunJava {
+  return (args, { cwd, timeoutMs, onLine }) =>
+    new Promise((resolve, reject) => {
+      const child = spawn(javaExe, args, { cwd, windowsHide: true, shell: false, stdio: ["ignore", "pipe", "pipe"] });
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error(`The installer did not finish within ${Math.round(timeoutMs / 60_000)} minutes`));
+      }, timeoutMs);
+      for (const stream of [child.stdout, child.stderr]) {
+        let buf = "";
+        stream.on("data", (d: Buffer) => {
+          buf += d.toString();
+          const lines = buf.split(/\r?\n/);
+          buf = lines.pop() ?? "";
+          for (const line of lines) if (line.trim()) onLine(line);
+        });
+      }
+      child.once("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+      child.once("exit", (code) => {
+        clearTimeout(timer);
+        resolve(code ?? 1);
+      });
+    });
 }
 
 function emptyStatus(id: string): ServerStatus {
@@ -549,13 +639,15 @@ function uniqueDir(parent: string, name: string): string {
   return candidate;
 }
 
-/** Undo a failed create: remove only the files NexCraft writes during creation. */
-function removeOwnFiles(dir: string) {
-  for (const f of ["server.jar", "server.jar.part", "server.properties", "eula.txt", "start.bat"]) fs.rmSync(path.join(dir, f), { force: true });
+/**
+ * Undo a failed create. The folder was new or empty when creation began (see
+ * uniqueDir), so everything in it was written by NexCraft or the loader installer.
+ */
+function removeCreatedDir(dir: string) {
   try {
-    if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
   } catch {
-    // Leave it.
+    // Leave it; the user can delete it.
   }
 }
 

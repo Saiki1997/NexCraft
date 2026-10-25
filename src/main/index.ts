@@ -15,6 +15,7 @@ import { Logger } from "./core/logger";
 import { ProcessHost } from "./core/process-host";
 import { registerIpc } from "./ipc/router";
 import { JavaService } from "./java/java-service";
+import { Loaders } from "./loaders/loaders";
 import { MojangClient } from "./minecraft/mojang";
 import { PROPERTY_DEFS } from "./servers/server-properties";
 import { ServerService } from "./servers/server-service";
@@ -88,12 +89,14 @@ async function main() {
     userAgent: USER_AGENT,
   });
   const mojang = new MojangClient(path.join(data.dataDir, "cache"), USER_AGENT);
+  const loaders = new Loaders({ userAgent: USER_AGENT, cacheDir: path.join(data.dataDir, "cache") });
   const servers = new ServerService({
     state,
     processes,
     downloads,
     java,
     mojang,
+    loaders,
     log: logger.scope("servers"),
     serversDir: () => settingsDir("serversDir", "servers"),
     emitStatus: (status) => send("server:status", status),
@@ -176,6 +179,7 @@ async function main() {
         return (await shell.openPath(server.directory)) === "";
       },
       "minecraft:versions": ({ includeSnapshots }) => mojang.versions(includeSnapshots),
+      "loaders:versions": ({ type, minecraftVersion }) => loaders.versions(type, minecraftVersion),
       "java:list": () => java.list(),
       "java:detect": async () => javaChanged(await java.detect()),
       "java:install": async ({ major }) => javaChanged(await java.install(major)),

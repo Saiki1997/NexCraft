@@ -23,6 +23,7 @@ export const CHANNEL_NAMES = [
   "servers:update-resources",
   "servers:open-folder",
   "minecraft:versions",
+  "loaders:versions",
   "java:list",
   "java:detect",
   "java:install",

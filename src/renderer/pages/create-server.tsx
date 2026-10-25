@@ -12,10 +12,23 @@ const STEPS: { id: InstallProgress["step"]; label: string }[] = [
   { id: "version", label: "Look up the version" },
   { id: "java", label: "Find or install Java" },
   { id: "download", label: "Download the official server" },
+  { id: "loader", label: "Install the mod loader" },
   { id: "files", label: "Write server settings" },
 ];
 
+type ServerType = "vanilla" | "fabric" | "quilt" | "forge" | "neoforge";
+
+const TYPES: { id: ServerType; label: string; hint: string }[] = [
+  { id: "vanilla", label: "Vanilla (official)", hint: "The official server from Mojang, without mods." },
+  { id: "fabric", label: "Fabric", hint: "Lightweight loader, quick to support new Minecraft versions." },
+  { id: "quilt", label: "Quilt", hint: "A Fabric-compatible loader. Most Fabric mods work on it." },
+  { id: "forge", label: "Forge", hint: "The long-standing loader behind most large modpacks." },
+  { id: "neoforge", label: "NeoForge", hint: "The successor to Forge for Minecraft 1.20.2 and newer." },
+];
+
 interface Form {
+  type: ServerType;
+  loaderVersion: string | null;
   name: string;
   minecraftVersion: string;
   worldName: string;
@@ -34,6 +47,8 @@ interface Form {
 }
 
 const INITIAL: Form = {
+  type: "vanilla",
+  loaderVersion: null,
   name: "My Server",
   minecraftVersion: "",
   worldName: "world",
@@ -74,6 +89,22 @@ export function CreateServerPage({ onCreated }: { onCreated: (id: string) => voi
       .catch((e: Error) => setVersionError(e.message));
   }, [snapshots, attempt]);
 
+  const [loaderVersions, setLoaderVersions] = useState<{ versions: { version: string; stable: boolean }[]; recommended: string | null } | null>(null);
+  const [loaderError, setLoaderError] = useState<string | null>(null);
+  useEffect(() => {
+    setLoaderVersions(null);
+    setLoaderError(null);
+    if (form.type === "vanilla" || !form.minecraftVersion) return;
+    let live = true;
+    call("loaders:versions", { type: form.type, minecraftVersion: form.minecraftVersion })
+      .then((r) => live && setLoaderVersions(r))
+      .catch((e: Error) => live && setLoaderError(`Could not load versions: ${e.message}`));
+    return () => {
+      live = false;
+    };
+  }, [form.type, form.minecraftVersion]);
+  const loaderMissing = form.type !== "vanilla" && (!loaderVersions || loaderVersions.versions.length === 0);
+
   const warning = info ? memoryWarning(form.memoryMb, info.totalMemoryMb) : null;
   const maxMemory = info ? Math.max(2048, Math.floor(info.totalMemoryMb / 512) * 512) : 16384;
   const reached = useMemo(() => new Set(progress?.map((p) => p.step)), [progress]);
@@ -87,7 +118,7 @@ export function CreateServerPage({ onCreated }: { onCreated: (id: string) => voi
       if (p.key === progressKey) setProgress((prev) => [...(prev ?? []), p]);
     });
     try {
-      const server = await call("servers:create", { input: { ...form, type: "vanilla" }, progressKey });
+      const server = await call("servers:create", { input: form, progressKey });
       refreshServers();
       toast.success(`${server.name} is ready. Accept the EULA to start it.`);
       onCreated(server.id);
@@ -103,7 +134,7 @@ export function CreateServerPage({ onCreated }: { onCreated: (id: string) => voi
     <>
       <PageHeader
         title="Create server"
-        description="NexCraft downloads the official server from Mojang, checks it, and sets up the right Java. Modded servers and modpacks come in the next milestone."
+        description="NexCraft downloads the official server and mod loader, checks them, and sets up the right Java."
       />
       <div className="grid max-w-4xl gap-4 lg:grid-cols-[1fr_18rem]">
         <div className="grid gap-4">
@@ -112,9 +143,17 @@ export function CreateServerPage({ onCreated }: { onCreated: (id: string) => voi
               <Field label="Server name">
                 <input className={cn(inputClass, "w-full")} value={form.name} maxLength={64} onChange={(e) => set("name", e.target.value)} />
               </Field>
-              <Field label="Server type" hint="Fabric, Quilt, Forge and NeoForge arrive in milestone 4.">
-                <select className={cn(inputClass, "w-full")} value="vanilla" disabled>
-                  <option value="vanilla">Vanilla (official)</option>
+              <Field label="Server type" hint={TYPES.find((t) => t.id === form.type)?.hint}>
+                <select
+                  className={cn(inputClass, "w-full")}
+                  value={form.type}
+                  onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as ServerType, loaderVersion: null }))}
+                >
+                  {TYPES.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
                 </select>
               </Field>
               <Field
@@ -146,6 +185,33 @@ export function CreateServerPage({ onCreated }: { onCreated: (id: string) => voi
                 <input type="checkbox" checked={snapshots} onChange={(e) => setSnapshots(e.target.checked)} />
                 Show snapshots
               </label>
+              {form.type !== "vanilla" && (
+                <Field
+                  label={`${TYPES.find((t) => t.id === form.type)?.label} version`}
+                  hint={
+                    loaderError ? (
+                      <span className="text-bad">{loaderError}</span>
+                    ) : loaderVersions && loaderVersions.versions.length === 0 ? (
+                      <span className="text-warn">This loader does not support Minecraft {form.minecraftVersion} yet. Pick an older Minecraft version.</span>
+                    ) : undefined
+                  }
+                >
+                  <select
+                    className={cn(inputClass, "w-full")}
+                    value={form.loaderVersion ?? ""}
+                    onChange={(e) => set("loaderVersion", e.target.value || null)}
+                    disabled={!loaderVersions?.versions.length}
+                  >
+                    <option value="">{loaderVersions ? (loaderVersions.recommended ? `Recommended (${loaderVersions.recommended})` : "None available") : "Loading…"}</option>
+                    {loaderVersions?.versions.slice(0, 200).map((v) => (
+                      <option key={v.version} value={v.version}>
+                        {v.version}
+                        {v.stable ? "" : " (beta)"}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
               <Field label="Message of the day" hint="Shown in the server list. Leave empty to use the server name.">
                 <input className={cn(inputClass, "w-full")} value={form.motd} maxLength={150} onChange={(e) => set("motd", e.target.value)} />
               </Field>
@@ -243,14 +309,16 @@ export function CreateServerPage({ onCreated }: { onCreated: (id: string) => voi
 
         <div className="space-y-4">
           <Card title="Create">
-            <Button variant="primary" className="w-full justify-center" disabled={busy || !form.minecraftVersion || !form.name.trim()} onClick={() => void submit()}>
+            <Button variant="primary" className="w-full justify-center" disabled={busy || !form.minecraftVersion || !form.name.trim() || loaderMissing} onClick={() => void submit()}>
               {busy && <Loader2 className="size-4 animate-spin" />}
               {busy ? "Creating…" : "Create server"}
             </Button>
             <p className="mt-3 text-xs text-muted">The server will not start until you read and accept the Minecraft EULA.</p>
             {progress && (
               <ol className="mt-4 space-y-2 text-sm">
-                {STEPS.map((step) => {
+                {STEPS.filter(
+                  (step) => !(step.id === "loader" && form.type === "vanilla") && !(step.id === "download" && (form.type === "forge" || form.type === "neoforge")),
+                ).map((step) => {
                   const done = reached.has(step.id) && (progress.at(-1)?.step !== step.id || reached.has("done"));
                   const active = progress.at(-1)?.step === step.id && !failed;
                   const message = [...progress].reverse().find((p) => p.step === step.id)?.message;

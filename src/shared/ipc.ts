@@ -102,6 +102,9 @@ export const channels = {
   "servers:update-resources": z.object({ id: z.string().min(1).max(128), patch: ResourcesPatchSchema }).strict(),
   "servers:open-folder": Id,
   "minecraft:versions": z.object({ includeSnapshots: z.boolean() }).strict(),
+  "loaders:versions": z
+    .object({ type: z.enum(["fabric", "quilt", "forge", "neoforge"]), minecraftVersion: z.string().min(1).max(32).regex(/^[\w.\-]+$/) })
+    .strict(),
   "java:list": Empty,
   "java:detect": Empty,
   "java:install": z.object({ major: z.number().int().min(8).max(25) }).strict(),
@@ -140,6 +143,7 @@ export interface ChannelOutput {
   "servers:update-resources": { server: ServerInstance; restartRequired: boolean };
   "servers:open-folder": boolean;
   "minecraft:versions": MinecraftVersionList;
+  "loaders:versions": { versions: { version: string; stable: boolean }[]; recommended: string | null };
   "java:list": JavaRuntime[];
   "java:detect": JavaRuntime[];
   "java:install": JavaRuntime;
