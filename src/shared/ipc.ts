@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { JavaRuntime, Job, ServerInstance, Settings } from "./model";
 import { ThemeSchema } from "./model";
 import type { ImportSummary, ManualFile, PackSearchHit } from "./modpacks";
+import type { ModChangePlan, ModHistoryEntry, ModList, ModUpdate } from "./mods";
 import { CreateServerInputSchema, ResourcesPatchSchema, type ConsoleLine, type InstallProgress, type ServerStatus } from "./servers";
 
 export const LogLevelSchema = z.enum(["debug", "info", "warn", "error"]);
@@ -64,6 +65,9 @@ export type SettingsPatch = z.infer<typeof SettingsPatchSchema>;
 
 const Empty = z.object({}).strict();
 const Id = z.object({ id: z.string().min(1).max(128) }).strict();
+const Provider = z.enum(["modrinth", "curseforge"]);
+/** A file name in a server's mods folder; the main process checks it again against the folder. */
+const ModFile = z.string().min(1).max(255).regex(/^[^/\\]+\.jar(\.disabled)?$/i);
 
 export interface MinecraftVersionList {
   versions: { id: string; type: "release" | "snapshot" | "old_beta" | "old_alpha"; releaseTime: string }[];
@@ -127,6 +131,23 @@ export const channels = {
     .strict(),
   "modpacks:manual-files": Id,
   "modpacks:add-manual-files": Id,
+  "mods:list": Id,
+  "mods:search": z.object({ id: z.string().min(1).max(128), provider: Provider, query: z.string().max(100) }).strict(),
+  "mods:versions": z.object({ id: z.string().min(1).max(128), provider: Provider, projectId: z.string().min(1).max(64) }).strict(),
+  "mods:plan-add": z.object({ id: z.string().min(1).max(128), provider: Provider, projectId: z.string().min(1).max(64), versionId: z.string().min(1).max(64).nullable() }).strict(),
+  "mods:check-updates": Id,
+  "mods:plan-update": z
+    .object({
+      id: z.string().min(1).max(128),
+      updates: z.array(z.object({ file: ModFile, provider: Provider, projectId: z.string().min(1).max(64), versionId: z.string().min(1).max(64) }).strict()).min(1).max(500),
+    })
+    .strict(),
+  "mods:apply": z.object({ planId: z.string().uuid() }).strict(),
+  "mods:add-files": Id,
+  "mods:set-enabled": z.object({ id: z.string().min(1).max(128), files: z.array(ModFile).min(1).max(500), enabled: z.boolean() }).strict(),
+  "mods:remove": z.object({ id: z.string().min(1).max(128), files: z.array(ModFile).min(1).max(500) }).strict(),
+  "mods:history": Id,
+  "mods:undo": z.object({ id: z.string().min(1).max(128), entryId: z.string().min(1).max(128) }).strict(),
   "java:list": Empty,
   "java:detect": Empty,
   "java:install": z.object({ major: z.number().int().min(8).max(25) }).strict(),
@@ -172,6 +193,18 @@ export interface ChannelOutput {
   "modpacks:install": { server: ServerInstance; clientOnlyRemoved: string[]; manual: ManualFile[] };
   "modpacks:manual-files": ManualFile[];
   "modpacks:add-manual-files": { added: string[]; rejected: string[] } | null;
+  "mods:list": ModList;
+  "mods:search": { hits: PackSearchHit[]; available: boolean };
+  "mods:versions": { id: string; name: string; gameVersions: string[]; loaders: string[]; date: string; stable: boolean }[];
+  "mods:plan-add": ModChangePlan;
+  "mods:check-updates": ModUpdate[];
+  "mods:plan-update": ModChangePlan;
+  "mods:apply": { summary: string };
+  "mods:add-files": { added: string[]; rejected: string[] } | null;
+  "mods:set-enabled": { summary: string };
+  "mods:remove": { summary: string };
+  "mods:history": ModHistoryEntry[];
+  "mods:undo": { summary: string };
   "java:list": JavaRuntime[];
   "java:detect": JavaRuntime[];
   "java:install": JavaRuntime;

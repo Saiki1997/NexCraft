@@ -17,6 +17,7 @@ import { registerIpc } from "./ipc/router";
 import { JavaService } from "./java/java-service";
 import { Loaders } from "./loaders/loaders";
 import { ModpackService } from "./modpacks/modpack-service";
+import { ModService } from "./mods/mod-service";
 import { CurseForgeClient } from "./providers/curseforge";
 import { ModrinthClient } from "./providers/modrinth";
 import { modpackVersions, resolvePackLink, searchModpacks } from "./providers/search";
@@ -121,6 +122,7 @@ async function main() {
     cacheDir: path.join(data.dataDir, "cache"),
     log: logger.scope("modpacks"),
   });
+  const mods = new ModService({ state, servers, downloads, modrinth, curseforge, log: logger.scope("mods") });
   const serverById = (id: string) => {
     const server = state.server(id);
     if (!server) throw new Error("That server no longer exists");
@@ -231,6 +233,24 @@ async function main() {
         const files = await pickFiles("Choose the files you downloaded", [{ name: "Mods", extensions: ["jar", "zip"] }], true);
         return files.length ? modpacks.addManualFiles(serverById(id), files) : null;
       },
+      "mods:list": ({ id }) => mods.list(id),
+      "mods:search": async ({ id, provider, query }) => {
+        if (provider === "curseforge" && !curseforge.available()) return { hits: [], available: false };
+        return { hits: await mods.search(id, provider, query), available: true };
+      },
+      "mods:versions": ({ id, provider, projectId }) => mods.versions(id, provider, projectId),
+      "mods:plan-add": ({ id, provider, projectId, versionId }) => mods.planAdd(id, provider, projectId, versionId),
+      "mods:check-updates": ({ id }) => mods.checkUpdates(id),
+      "mods:plan-update": ({ id, updates }) => mods.planUpdate(id, updates),
+      "mods:apply": ({ planId }) => mods.apply(planId),
+      "mods:add-files": async ({ id }) => {
+        const files = await pickFiles("Choose mod files", [{ name: "Mods", extensions: ["jar"] }], true);
+        return files.length ? mods.addFiles(id, files) : null;
+      },
+      "mods:set-enabled": ({ id, files, enabled }) => mods.setEnabled(id, files, enabled),
+      "mods:remove": ({ id, files }) => mods.remove(id, files),
+      "mods:history": ({ id }) => mods.history(id),
+      "mods:undo": ({ id, entryId }) => mods.undo(id, entryId),
       "java:list": () => java.list(),
       "java:detect": async () => javaChanged(await java.detect()),
       "java:install": async ({ major }) => javaChanged(await java.install(major)),

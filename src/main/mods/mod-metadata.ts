@@ -24,12 +24,20 @@ export interface ModMetadata {
   /** Where the mod says it runs. "unknown" when it does not say. */
   environment: "client" | "server" | "both" | "unknown";
   dependencies: ModDependency[];
+  /** Other mod ids this jar satisfies: declared aliases and mods bundled inside it (jar-in-jar). */
+  provides: string[];
 }
 
-const FILES = ["fabric.mod.json", "quilt.mod.json", "META-INF/mods.toml", "META-INF/neoforge.mods.toml", "mcmod.info", "META-INF/MANIFEST.MF"];
+const FILES = ["fabric.mod.json", "quilt.mod.json", "META-INF/mods.toml", "META-INF/neoforge.mods.toml", "mcmod.info", "META-INF/MANIFEST.MF", "META-INF/jarjar/metadata.json"];
+const MAX_NESTED_JARS = 64;
+const MAX_NESTED_BYTES = 16 * 1024 * 1024;
 
 /** Returns null for jars that carry no recognisable mod metadata (libraries, plugins). */
-export async function readModMetadata(jar: string): Promise<ModMetadata | null> {
+export async function readModMetadata(jar: string | Buffer): Promise<ModMetadata | null> {
+  return readFrom(jar, true);
+}
+
+async function readFrom(jar: string | Buffer, withNested: boolean): Promise<ModMetadata | null> {
   const entries = await readZipEntries(jar, FILES, 1024 * 1024);
   const text = (name: string) => entries.get(name)?.toString("utf8").replace(/^﻿/, "");
   const manifestVersion = /^Implementation-Version:\s*(.+)$/m.exec(text("META-INF/MANIFEST.MF") ?? "")?.[1]?.trim();
@@ -61,13 +69,52 @@ export async function readModMetadata(jar: string): Promise<ModMetadata | null> 
         loaders: ["forge"],
         environment: "unknown",
         dependencies: first.mcversion ? [{ id: "minecraft", range: String(first.mcversion), kind: "required" }] : [],
+        provides: [],
       });
     }
   }
   if (!found.length) return null;
   // Multi-loader jars carry several files: merge the loaders, keep the first description.
-  const merged = { ...found[0], loaders: [...new Set(found.flatMap((f) => f.loaders))] };
-  return merged;
+  const provides = new Set(found.flatMap((f) => f.provides));
+  if (withNested) {
+    for (const nested of await readNested(jar, nestedJarPaths(text))) {
+      provides.add(nested.id);
+      for (const p of nested.provides) provides.add(p);
+    }
+  }
+  provides.delete(found[0].id);
+  return { ...found[0], loaders: [...new Set(found.flatMap((f) => f.loaders))], provides: [...provides] };
+}
+
+/** Jars bundled inside a mod, as listed by Fabric/Quilt ("jars") or Forge/NeoForge's jarjar metadata. */
+function nestedJarPaths(text: (name: string) => string | undefined): string[] {
+  const paths: string[] = [];
+  const safeJson = (s: string | undefined) => {
+    try {
+      return s ? (JSON.parse(stripJsonComments(s)) as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  };
+  const fabric = safeJson(text("fabric.mod.json"));
+  for (const j of Array.isArray(fabric?.jars) ? fabric.jars : []) if (j && typeof (j as { file?: unknown }).file === "string") paths.push((j as { file: string }).file);
+  const quilt = (safeJson(text("quilt.mod.json"))?.quilt_loader ?? {}) as Record<string, unknown>;
+  for (const j of Array.isArray(quilt.jars) ? quilt.jars : []) if (typeof j === "string") paths.push(j);
+  const jarjar = safeJson(text("META-INF/jarjar/metadata.json"));
+  for (const j of Array.isArray(jarjar?.jars) ? jarjar.jars : []) if (j && typeof (j as { path?: unknown }).path === "string") paths.push((j as { path: string }).path);
+  return [...new Set(paths.map((p) => p.replace(/^\/+/, "")))].slice(0, MAX_NESTED_JARS);
+}
+
+async function readNested(jar: string | Buffer, paths: string[]): Promise<ModMetadata[]> {
+  if (!paths.length) return [];
+  const blobs = await readZipEntries(jar, paths, MAX_NESTED_BYTES);
+  const out: ModMetadata[] = [];
+  for (const blob of blobs.values()) {
+    // One level deep is enough to find what a jar provides; a broken nested jar is not the outer mod's problem.
+    const meta = await readFrom(blob, false).catch(() => null);
+    if (meta) out.push(meta);
+  }
+  return out;
 }
 
 function fromFabric(j: Record<string, unknown>): ModMetadata {
@@ -89,6 +136,7 @@ function fromFabric(j: Record<string, unknown>): ModMetadata {
     // Fabric's default environment is "*": both sides.
     environment: env === "client" ? "client" : env === "server" ? "server" : env === "*" || env === undefined ? "both" : "unknown",
     dependencies: deps,
+    provides: Array.isArray(j.provides) ? j.provides.map((p) => normaliseId(String(p))) : [],
   };
 }
 
@@ -117,6 +165,7 @@ function fromQuilt(j: Record<string, unknown>): ModMetadata {
     loaders: ["quilt"],
     environment: env === "client" ? "client" : env === "dedicated_server" ? "server" : env === "*" ? "both" : "unknown",
     dependencies: deps,
+    provides: Array.isArray(ql.provides) ? ql.provides.map((p) => normaliseId(typeof p === "string" ? p : String((p as { id?: unknown }).id ?? ""))).filter(Boolean) : [],
   };
 }
 
@@ -145,6 +194,7 @@ function fromModsToml(t: Record<string, unknown>, loader: "forge" | "neoforge", 
     loaders: [loader],
     environment: clientOnlyHint ? "client" : "unknown",
     dependencies: deps,
+    provides: mods.slice(1).map((m) => normaliseId(String(m.modId ?? ""))).filter(Boolean),
   };
 }
 

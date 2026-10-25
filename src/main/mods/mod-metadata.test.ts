@@ -30,6 +30,27 @@ describe("readModMetadata", () => {
     expect((await readModMetadata(jar([{ name: "fabric.mod.json", data: JSON.stringify({ id: "lithium", version: "1" }) }])))?.environment).toBe("both");
   });
 
+  it("lists the mods a jar bundles or declares, so their ids count as installed", async () => {
+    const nested = buildZip([{ name: "fabric.mod.json", data: JSON.stringify({ id: "fabric-api-base", version: "0.4.0" }) }]);
+    const meta = await readModMetadata(
+      jar([
+        { name: "fabric.mod.json", data: JSON.stringify({ id: "fabric-api", version: "0.100.0", provides: ["fabric"], jars: [{ file: "META-INF/jars/base.jar" }, { file: "META-INF/jars/missing.jar" }] }) },
+        { name: "META-INF/jars/base.jar", data: nested },
+      ]),
+    );
+    expect(meta?.provides.sort()).toEqual(["fabric", "fabric-api-base"]);
+
+    const forgeNested = buildZip([{ name: "META-INF/mods.toml", data: '[[mods]]\nmodId="mixinextras"\nversion="0.4.1"' }]);
+    const forge = await readModMetadata(
+      jar([
+        { name: "META-INF/mods.toml", data: '[[mods]]\nmodId="create"\nversion="6.0.0"' },
+        { name: "META-INF/jarjar/metadata.json", data: JSON.stringify({ jars: [{ path: "META-INF/jarjar/mixinextras.jar" }] }) },
+        { name: "META-INF/jarjar/mixinextras.jar", data: forgeNested },
+      ]),
+    );
+    expect(forge?.provides).toEqual(["mixinextras"]);
+  });
+
   it("reads NeoForge and Forge mods.toml, with the version from the manifest", async () => {
     const toml = `
 modLoader="javafml"

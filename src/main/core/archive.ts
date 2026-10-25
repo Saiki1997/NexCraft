@@ -84,7 +84,7 @@ export async function readZipEntry(file: string, name: string, maxBytes = 16 * 1
  * that wrap everything in one top-level directory). `filter` can skip entries.
  */
 /** Read several small entries in one pass. Missing entries are left out of the result. */
-export async function readZipEntries(file: string, names: string[], maxBytes = 4 * 1024 * 1024): Promise<Map<string, Buffer>> {
+export async function readZipEntries(file: string | Buffer, names: string[], maxBytes = 4 * 1024 * 1024): Promise<Map<string, Buffer>> {
   const wanted = new Set(names);
   const found = new Map<string, Buffer>();
   const zip = await open(file);
@@ -185,12 +185,16 @@ export async function extractZip(
   return { files, bytes };
 }
 
-function open(file: string): Promise<yauzl.ZipFile> {
+/** Open a ZIP from disk, or from memory for archives nested inside another (jar-in-jar). */
+function open(file: string | Buffer): Promise<yauzl.ZipFile> {
   return new Promise((resolve, reject) => {
-    yauzl.open(file, { lazyEntries: true, autoClose: false, validateEntrySizes: true, strictFileNames: false }, (err, zip) => {
+    const done = (err: Error | null, zip?: yauzl.ZipFile) => {
       if (err || !zip) reject(new ArchiveError(`Not a readable ZIP archive: ${err?.message ?? "unknown error"}`));
       else resolve(zip);
-    });
+    };
+    const options = { lazyEntries: true, autoClose: false, validateEntrySizes: true, strictFileNames: false };
+    if (typeof file === "string") yauzl.open(file, options, done);
+    else yauzl.fromBuffer(file, options, done);
   });
 }
 
