@@ -237,6 +237,18 @@ describe("ServerService lifecycle", () => {
     expect(svc.list()[0].lastStartedAt).not.toBeNull();
   });
 
+  it("waits for the server to confirm a command, and gives up when it does not", async () => {
+    const { svc } = setup();
+    const server = await svc.create(baseInput, "k");
+    svc.acceptEula(server.id);
+    expect(await svc.commandAndWait(server.id, "save-all flush", /Saved the game/, 1000)).toBe(false);
+    await svc.start(server.id);
+    await until(() => svc.status(server.id).state === "running");
+    expect(await svc.commandAndWait(server.id, "save-all flush", /Saved the game/, 5000)).toBe(true);
+    expect(await svc.commandAndWait(server.id, "say hi", /Saved the game/, 200)).toBe(false);
+    expect(await svc.stop(server.id, 5000)).toBe("stopped");
+  });
+
   it("reports a crash and records diagnostics", async () => {
     const { svc } = setup();
     const server = await svc.create(baseInput, "k");

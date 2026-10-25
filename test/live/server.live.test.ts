@@ -8,6 +8,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { BackupService } from "../../src/main/backups/backup-service";
+import { listZip } from "../../src/main/core/archive";
 import { DownloadQueue } from "../../src/main/core/download-queue";
 import { ProcessHost } from "../../src/main/core/process-host";
 import { JavaService } from "../../src/main/java/java-service";
@@ -103,10 +105,25 @@ describe.skipIf(!process.env.NEXCRAFT_LIVE)(`live ${TYPE} server`, () => {
     servers.sendCommand(server.id, "list");
     await until(() => consoleLines.some((l) => /There are 0 of a max of \d+ players online/.test(l.text)), 30_000, "the list command's reply");
 
+    // A backup while running must pause saving, flush the world, and turn saving back on.
+    const backups = new BackupService({ state, servers, backupsDir: () => path.join(root, "backups"), log });
+    const backup = await backups.create(server.id, { kind: "manual" });
+    expect(backup).toMatchObject({ verified: true, savedWhileRunning: true });
+    const names = (await listZip(backups.archivePath(server.id, backup.id))).map((e) => e.name);
+    expect(names).toContain("world/level.dat");
+    expect(names.some((n) => n.startsWith("libraries/") || n.endsWith("session.lock"))).toBe(false);
+    expect(consoleLines.some((l) => /Automatic saving is now enabled/.test(l.text))).toBe(true);
+
     const result = await servers.stop(server.id, 120_000);
     expect(result).toBe("stopped");
     expect(servers.status(server.id).lastExit).toMatchObject({ code: 0, requested: true });
     expect(fs.existsSync(path.join(server.directory, "world", "level.dat"))).toBe(true);
+
+    // Restore over the stopped server: a safety backup first, then the world comes back.
+    fs.rmSync(path.join(server.directory, "world"), { recursive: true });
+    const { safetyBackupId } = await backups.restore(server.id, backup.id);
+    expect(fs.existsSync(path.join(server.directory, "world", "level.dat"))).toBe(true);
+    expect(backups.list(server.id).map((b) => b.id)).toContain(safetyBackupId);
     servers.dispose();
   });
 
