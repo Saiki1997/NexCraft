@@ -1,0 +1,26 @@
+name: Promote release
+
+# New releases go out as prereleases. Once a build has been tried on Windows,
+# run this with its tag to turn it into a full release marked as the latest.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to promote, e.g. v0.3.0
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    name: Promote ${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Not a release tag: $TAG"; exit 1; }
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease=false --latest
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,url
