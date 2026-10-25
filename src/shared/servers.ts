@@ -63,7 +63,7 @@ export interface ConsoleLine {
 
 export interface InstallProgress {
   key: string;
-  step: "version" | "java" | "download" | "loader" | "files" | "done" | "failed";
+  step: "version" | "java" | "download" | "loader" | "files" | "modpack" | "done" | "failed";
   message: string;
 }
 

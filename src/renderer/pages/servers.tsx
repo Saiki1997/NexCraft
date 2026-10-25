@@ -8,6 +8,7 @@ import { Badge, Button, Card, Dialog, EmptyState, Field, inputClass, PageHeader 
 import { call } from "../lib/api";
 import { cn, formatTime } from "../lib/format";
 import { refreshServers, useAppInfo, useConsole, useJavaRuntimes, useServers, useServerStatuses } from "../lib/store";
+import { ManualDownloads } from "./modpacks";
 
 const EULA_URL = "https://aka.ms/MinecraftEULA";
 
@@ -268,6 +269,9 @@ function ServerDetail({ server, status, onBack }: { server: ServerInstance; stat
       </div>
       <Stats server={server} status={status} />
       {status?.findings.length ? <Findings status={status} /> : null}
+      <div className="mt-4">
+        <ManualDownloads serverId={server.id} />
+      </div>
       <div role="tablist" className="mt-5 mb-3 flex gap-1 border-b border-border">
         {(
           [

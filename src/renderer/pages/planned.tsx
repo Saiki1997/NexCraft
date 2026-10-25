@@ -1,17 +1,5 @@
 import { NotYetBuilt, PageHeader } from "../components/ui";
 
-export function ModpacksPage() {
-  return (
-    <>
-      <PageHeader title="Modpacks" description="Turn a CurseForge or Modrinth modpack into a working server." />
-      <NotYetBuilt milestone="milestone 4">
-        <p>Import CurseForge and Modrinth pack files or project links. NexCraft will check the archive, work out the Minecraft version, loader and Java, prefer the official server pack, and leave out client-only mods.</p>
-        <p>Mods whose authors do not allow third-party downloads are listed with a link so you can download them yourself.</p>
-      </NotYetBuilt>
-    </>
-  );
-}
-
 export function ModsPage() {
   return (
     <>

@@ -7,7 +7,8 @@ import { DashboardPage } from "./pages/dashboard";
 import { DiagnosticsPage } from "./pages/diagnostics";
 import { DownloadsPage } from "./pages/downloads";
 import { CreateServerPage } from "./pages/create-server";
-import { BackupsPage, ModpacksPage, ModsPage } from "./pages/planned";
+import { BackupsPage, ModsPage } from "./pages/planned";
+import { ModpacksPage } from "./pages/modpacks";
 import { ServersPage } from "./pages/servers";
 import { SettingsPage } from "./pages/settings";
 import type { SettingsView } from "../shared/ipc";
@@ -81,7 +82,7 @@ export function App() {
         {page === "dashboard" && <DashboardPage go={setPage} openServer={openServer} />}
         {page === "servers" && <ServersPage selected={selectedServer} onSelect={setSelectedServer} onCreate={() => setPage("create")} />}
         {page === "create" && <CreateServerPage onCreated={openServer} />}
-        {page === "modpacks" && <ModpacksPage />}
+        {page === "modpacks" && <ModpacksPage onInstalled={openServer} />}
         {page === "mods" && <ModsPage />}
         {page === "downloads" && <DownloadsPage />}
         {page === "backups" && <BackupsPage />}
