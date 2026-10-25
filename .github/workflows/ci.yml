@@ -30,13 +30,14 @@ jobs:
       - run: npm test
 
   live:
-    name: Real Vanilla server (${{ matrix.os }})
+    name: Real ${{ matrix.type }} server (${{ matrix.os }})
     needs: test
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        type: [vanilla, fabric, quilt, forge, neoforge]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -54,6 +55,7 @@ jobs:
       - run: npm run test:live
         env:
           NEXCRAFT_LIVE: "1"
+          NEXCRAFT_LIVE_TYPE: ${{ matrix.type }}
 
   package-windows:
     name: Windows x64 portable ZIP

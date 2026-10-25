@@ -78,6 +78,22 @@ function setup(opts: { runtimes?: JavaRuntime[]; portFree?: boolean; versions?: 
       return { versionId: v, url: `https://piston-data.mojang.com/v1/objects/${JAR_SHA1}/server.jar`, sha1: JAR_SHA1, size: JAR.length, javaMajor: versions[v], javaFromManifest: true };
     },
   };
+  const loaderCalls: { type: string; loaderVersion: string; files: string[] }[] = [];
+  const loaders = {
+    versions: async (type: string, mc: string) =>
+      mc === "1.21.4" ? { versions: [{ version: "2.0", stable: true }, { version: "1.0", stable: true }], recommended: "2.0" } : { versions: [], recommended: null },
+    install: async (type: string, ctx: { dir: string; loaderVersion: string; report: (m: string) => void }) => {
+      ctx.report(`installing ${type}`);
+      loaderCalls.push({ type, loaderVersion: ctx.loaderVersion, files: fs.readdirSync(ctx.dir) });
+      if (type === "forge") {
+        fs.mkdirSync(path.join(ctx.dir, "libraries"), { recursive: true });
+        fs.writeFileSync(path.join(ctx.dir, "libraries", "win_args.txt"), "");
+        return { launchArgs: ["@libraries/win_args.txt", "nogui"] };
+      }
+      fs.writeFileSync(path.join(ctx.dir, "fabric-server-launch.jar"), "x");
+      return { launchArgs: ["-jar", "fabric-server-launch.jar", "nogui"] };
+    },
+  };
   const statuses: ServerStatus[] = [];
   const consoleLines: ConsoleLine[] = [];
   const installSteps: InstallProgress[] = [];
@@ -87,6 +103,7 @@ function setup(opts: { runtimes?: JavaRuntime[]; portFree?: boolean; versions?: 
     downloads,
     java: java as never,
     mojang,
+    loaders: loaders as never,
     log: silentLog,
     serversDir: () => path.join(root, "servers"),
     emitStatus: (s) => statuses.push(s),
@@ -97,7 +114,7 @@ function setup(opts: { runtimes?: JavaRuntime[]; portFree?: boolean; versions?: 
     command: (_exe, args) => ({ executable: process.execPath, args: [FAKE_MC, ...args] }),
   });
   services.push(svc);
-  return { root, svc, state, statuses, consoleLines, installSteps, fetched, installs, processes };
+  return { root, svc, state, statuses, consoleLines, installSteps, fetched, installs, processes, loaderCalls };
 }
 
 const baseInput = { name: "My Server", minecraftVersion: "1.21.4", type: "vanilla" as const };
@@ -140,10 +157,38 @@ describe("ServerService.create", () => {
     expect(path.basename(b.directory)).toBe("My Server (2)");
   });
 
-  it("rejects input that is not a vanilla server or has a bad name", async () => {
+  it("rejects unknown server types and bad versions", async () => {
     const { svc } = setup();
-    await expect(svc.create({ ...baseInput, type: "forge" as never }, "k")).rejects.toThrow();
+    await expect(svc.create({ ...baseInput, type: "bukkit" as never }, "k")).rejects.toThrow();
     await expect(svc.create({ ...baseInput, minecraftVersion: "1.21; rm -rf" }, "k")).rejects.toThrow();
+  });
+});
+
+describe("ServerService with mod loaders", () => {
+  it("installs the recommended loader version after the Vanilla jar", async () => {
+    const { svc, loaderCalls, installSteps } = setup();
+    const server = await svc.create({ ...baseInput, type: "fabric" }, "k");
+    expect(server).toMatchObject({ type: "fabric", loaderVersion: "2.0", launchArgs: ["-jar", "fabric-server-launch.jar", "nogui"] });
+    expect(loaderCalls[0].files).toContain("server.jar");
+    expect(installSteps.map((s) => s.step)).toContain("loader");
+    expect(fs.readFileSync(path.join(server.directory, "logs", "nexcraft-install.log"), "utf8")).toContain("installing fabric");
+  });
+
+  it("lets Forge fetch Vanilla itself and starts from its argument file", async () => {
+    const { svc, fetched, loaderCalls } = setup();
+    const server = await svc.create({ ...baseInput, type: "forge", loaderVersion: "1.0" }, "k");
+    expect(fetched).toHaveLength(0);
+    expect(loaderCalls[0]).toMatchObject({ loaderVersion: "1.0", files: ["logs"] });
+    svc.acceptEula(server.id);
+    fs.rmSync(path.join(server.directory, "libraries", "win_args.txt"));
+    await expect(svc.start(server.id)).rejects.toThrow(/libraries\/win_args.txt is missing/);
+  });
+
+  it("refuses loader versions that do not exist, before writing anything", async () => {
+    const { svc, root } = setup({ versions: { "1.21.4": 21, "1.8.9": 8 } });
+    await expect(svc.create({ ...baseInput, type: "quilt", loaderVersion: "9.9" }, "k")).rejects.toThrow(/not available/);
+    await expect(svc.create({ ...baseInput, type: "neoforge", minecraftVersion: "1.8.9" }, "k")).rejects.toThrow(/does not support Minecraft 1.8.9/);
+    expect(fs.existsSync(path.join(root, "servers"))).toBe(false);
   });
 });
 
@@ -253,7 +298,13 @@ describe("ServerService settings", () => {
 
 describe("buildJvmArgs", () => {
   it("puts extra options before -jar", () => {
-    expect(buildJvmArgs({ memoryMb: 4096, extraJvmArgs: ["-XX:+UseG1GC"], serverJar: "server.jar" })).toEqual([
+    expect(buildJvmArgs({ memoryMb: 2048, extraJvmArgs: [], serverJar: "server.jar", launchArgs: ["@libraries/x/win_args.txt", "nogui"] })).toEqual([
+      "-Xms1024M",
+      "-Xmx2048M",
+      "@libraries/x/win_args.txt",
+      "nogui",
+    ]);
+    expect(buildJvmArgs({ memoryMb: 4096, extraJvmArgs: ["-XX:+UseG1GC"], serverJar: "server.jar", launchArgs: [] })).toEqual([
       "-Xms1024M",
       "-Xmx4096M",
       "-XX:+UseG1GC",
