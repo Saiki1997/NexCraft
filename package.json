@@ -1,7 +1,7 @@
 {
   "name": "nexcraft",
   "productName": "NexCraft",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "NexCraft: a Minecraft Java Edition server and mod manager for Windows",
   "license": "MIT",
   "private": true,
