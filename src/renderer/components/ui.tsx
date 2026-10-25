@@ -72,16 +72,6 @@ export function Badge({ tone = "neutral", children }: { tone?: "neutral" | "good
   return <span className={cn("inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium", styles)}>{children}</span>;
 }
 
-/** Shown on screens whose features land in a later milestone. Says so plainly; no fake controls. */
-export function NotYetBuilt({ milestone, children }: { milestone: string; children: ReactNode }) {
-  return (
-    <div className="rounded-lg border border-border bg-surface p-5">
-      <Badge tone="accent">Planned for {milestone}</Badge>
-      <div className="mt-3 max-w-2xl space-y-2 text-sm text-muted">{children}</div>
-    </div>
-  );
-}
-
 export const inputClass = "rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-sm focus:border-accent focus:outline-none";
 
 export function Dialog({ title, children, actions, onClose }: { title: string; children: ReactNode; actions: ReactNode; onClose: () => void }) {

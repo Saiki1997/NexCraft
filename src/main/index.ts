@@ -16,6 +16,7 @@ import { ProcessHost } from "./core/process-host";
 import { registerIpc } from "./ipc/router";
 import { JavaService } from "./java/java-service";
 import { Loaders } from "./loaders/loaders";
+import { BackupService } from "./backups/backup-service";
 import { ModpackService } from "./modpacks/modpack-service";
 import { ModService } from "./mods/mod-service";
 import { CurseForgeClient } from "./providers/curseforge";
@@ -123,6 +124,14 @@ async function main() {
     log: logger.scope("modpacks"),
   });
   const mods = new ModService({ state, servers, downloads, modrinth, curseforge, log: logger.scope("mods") });
+  const backups = new BackupService({
+    state,
+    servers,
+    backupsDir: () => folderFor("backups"),
+    log: logger.scope("backups"),
+    onChange: (serverId) => send("backups:changed", { serverId }),
+  });
+  backups.start();
   const serverById = (id: string) => {
     const server = state.server(id);
     if (!server) throw new Error("That server no longer exists");
@@ -251,6 +260,19 @@ async function main() {
       "mods:remove": ({ id, files }) => mods.remove(id, files),
       "mods:history": ({ id }) => mods.history(id),
       "mods:undo": ({ id, entryId }) => mods.undo(id, entryId),
+      "backups:list": ({ id }) => backups.list(id),
+      "backups:create": ({ id, note }) => backups.create(id, { kind: "manual", note }),
+      "backups:preview": ({ id, backupId }) => backups.preview(id, backupId),
+      "backups:restore": ({ id, backupId }) => backups.restore(id, backupId),
+      "backups:delete": ({ id, backupId }) => {
+        backups.delete(id, backupId);
+        return true;
+      },
+      "backups:show": ({ id, backupId }) => {
+        shell.showItemInFolder(backups.archivePath(id, backupId));
+        return true;
+      },
+      "backups:set-schedule": ({ id, everyHours, keep }) => backups.setSchedule(id, { everyHours, keep }),
       "java:list": () => java.list(),
       "java:detect": async () => javaChanged(await java.detect()),
       "java:install": async ({ major }) => javaChanged(await java.install(major)),
@@ -362,6 +384,7 @@ async function main() {
           if (choice.response !== 0) return;
           for (const id of stuck) await servers.forceStop(id);
         }
+        backups.stop();
         servers.dispose();
         quitting = true;
         app.quit();

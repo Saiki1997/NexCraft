@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { JavaRuntime, Job, ServerInstance, Settings } from "./model";
 import { ThemeSchema } from "./model";
 import type { ImportSummary, ManualFile, PackSearchHit } from "./modpacks";
+import type { BackupInfo, RestorePreview } from "./backups";
 import type { ModChangePlan, ModHistoryEntry, ModList, ModUpdate } from "./mods";
 import { CreateServerInputSchema, ResourcesPatchSchema, type ConsoleLine, type InstallProgress, type ServerStatus } from "./servers";
 
@@ -65,6 +66,7 @@ export type SettingsPatch = z.infer<typeof SettingsPatchSchema>;
 
 const Empty = z.object({}).strict();
 const Id = z.object({ id: z.string().min(1).max(128) }).strict();
+const BackupRef = z.object({ id: z.string().min(1).max(128), backupId: z.string().min(1).max(200).regex(/^[\w.-]+$/) }).strict();
 const Provider = z.enum(["modrinth", "curseforge"]);
 /** A file name in a server's mods folder; the main process checks it again against the folder. */
 const ModFile = z.string().min(1).max(255).regex(/^[^/\\]+\.jar(\.disabled)?$/i);
@@ -148,6 +150,15 @@ export const channels = {
   "mods:remove": z.object({ id: z.string().min(1).max(128), files: z.array(ModFile).min(1).max(500) }).strict(),
   "mods:history": Id,
   "mods:undo": z.object({ id: z.string().min(1).max(128), entryId: z.string().min(1).max(128) }).strict(),
+  "backups:list": Id,
+  "backups:create": z.object({ id: z.string().min(1).max(128), note: z.string().max(200) }).strict(),
+  "backups:preview": BackupRef,
+  "backups:restore": BackupRef,
+  "backups:delete": BackupRef,
+  "backups:show": BackupRef,
+  "backups:set-schedule": z
+    .object({ id: z.string().min(1).max(128), everyHours: z.number().int().min(1).max(168).nullable(), keep: z.number().int().min(1).max(100) })
+    .strict(),
   "java:list": Empty,
   "java:detect": Empty,
   "java:install": z.object({ major: z.number().int().min(8).max(25) }).strict(),
@@ -205,6 +216,13 @@ export interface ChannelOutput {
   "mods:remove": { summary: string };
   "mods:history": ModHistoryEntry[];
   "mods:undo": { summary: string };
+  "backups:list": BackupInfo[];
+  "backups:create": BackupInfo;
+  "backups:preview": RestorePreview;
+  "backups:restore": { safetyBackupId: string };
+  "backups:delete": boolean;
+  "backups:show": boolean;
+  "backups:set-schedule": ServerInstance;
   "java:list": JavaRuntime[];
   "java:detect": JavaRuntime[];
   "java:install": JavaRuntime;
@@ -230,6 +248,7 @@ export interface EventPayload {
   "server:console": { id: string; lines: ConsoleLine[] };
   "server:install": InstallProgress;
   "java:changed": JavaRuntime[];
+  "backups:changed": { serverId: string };
 }
 export type EventName = keyof EventPayload;
 
